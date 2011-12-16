@@ -1,7 +1,8 @@
 import httplib
 import json
-import sys
 from urlparse import urlparse
+
+from exceptions import CommandError
 
 class Client(object):
     def __init__(self):
@@ -33,14 +34,12 @@ class Client(object):
             response = json.load(response)
             return response
         if response.status == 404:
-            raise RuntimeError(response.reason)
+            raise CommandError(1, response.reason)
         if response.status == 401:
-            raise RuntimeError(response.reason)
+            raise CommandError(1, response.reason)
         if response.status == 204:
             pass
-        else:
-            sys.stderr.write("Warning: Unhandled response code: %s" % response.status)
-        return response.read()
+        raise CommandError(1, "Unhandled response code: %s" % response.status)
 
     def __auth_headers(self):
         return {
