@@ -1,0 +1,33 @@
+#!/usr/bin/python
+
+import sys
+import os
+import argparse
+
+from nova2ools import *
+
+class FlavorsCommand(object):
+    def __init__(self, user, access_key, project):
+        self.__client = Client()
+        self.__user = user
+        self.__access_key = access_key
+        self.__project = project
+
+    def auth(self):
+        self.__client.auth(self.__user, self.__access_key, self.__project)
+
+    def list(self):
+        flavors = self.__client.get("/flavors/detail")
+        for flv in flavors["flavors"]:
+            sys.stdout.write("{id}: {name} ram:{ram} vcpus:{vcpus} swap:{swap} disc:{disk}\n".format(**flv))
+
+    @handle_command_error
+    def main(self):
+        self.auth()
+        self.list()
+
+parser = argparse.ArgumentParser(description="Show available flavors for the project")
+parser.add_argument("project", help="OpenStack Project(Tenant) name")
+
+options = parser.parse_args()
+FlavorsCommand(os.environ['NOVA_USERNAME'], os.environ['NOVA_API_KEY'], options.project).main()
