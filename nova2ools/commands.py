@@ -9,6 +9,35 @@ from client import Client
 from exceptions import CommandError
 from exceptions import handle_command_error
 
+
+__all__ = []
+
+
+def export(function):
+    global __all__
+    __all__.append(function.__name__)
+    return function
+
+
+def CliCommandMetaclass(name, bases, dict):
+    global __all__
+    __all__.append(name)
+
+    for i in ("get", "put", "post", "delete"):
+        def gen_method(original_method, path_part):
+            def method(self, path, *args, **kwargs):
+                return original_method(self.client, path_part + path, *args, **kwargs)
+
+            method.__name__ = original_method.__name__
+            method.__doc__ = getattr(original_method, "__doc__")
+            return method
+
+        dict[i] = gen_method(getattr(Client, i), dict["RESOURCE"])
+    return type(name, bases, dict)
+
+
+__all__.append("CliCommand")
+
 class CliCommand(object):
     __common_args = [
         (("--username", "-u"), {"help": "OpenStack user name"}),
@@ -25,34 +54,24 @@ class CliCommand(object):
 
     def __init__(self, help):
         self.__help = help
-        self.__client = Client()
         self.__parser = self.__generate_options_parser()
         self.parse_args()
+        self.client = Client()
+        self.client.set_debug(self.options.debug)
         self.auth()
 
     def parse_args(self):
-        self._options = self.__parser.parse_args()
-        self.__client.set_debug(self._options.debug)
-
-    for i in ("get", "put", "post", "delete"):
-        def gen_method(original_method):
-            def method(self, *args, **kwargs):
-                return original_method(self.__client, *args, **kwargs)
-            method.__name__ = original_method.__name__
-            method.__doc__ = getattr(original_method, "__doc__")
-            return method
-        #noinspection PyArgumentList
-        vars()[i] = gen_method(getattr(Client, i))
+        self.options = self.__parser.parse_args()
 
     def auth(self):
-        opts = self._options
+        opts = self.options
         if opts.username is None:
             raise CommandError(1, "OpenStack user name is undefined")
         if opts.api_key is None:
             raise CommandError(1, "OpenStack API secret key is undefined")
         if opts.project is None:
             raise CommandError(1, "OpenStack Project(Tenant) name is undefined")
-        self.__client.auth(opts.username, opts.api_key, opts.project)
+        self.client.auth(opts.username, opts.api_key, opts.project)
 
     def __generate_options_parser(self):
         parser = ArgumentParser(description=self.__help)
@@ -72,6 +91,7 @@ class CliCommand(object):
         return parser
 
 
+@export
 def subcommand(help, name=None):
     def decorator(method):
         method.subcommand = True
@@ -82,12 +102,14 @@ def subcommand(help, name=None):
     return decorator
 
 
+@export
 def add_argument(*args, **kwargs):
     def decorator(method):
         if not hasattr(method, "subcommand_args"):
             method.subcommand_args = []
-        method.subcommand_args.append((args, kwargs))
+        method.subcommand_args.insert(0, (args, kwargs))
         return method
+
     return decorator
 
 
@@ -95,23 +117,31 @@ def add_argument(*args, **kwargs):
 
 
 class FlavorsCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+
+    RESOURCE = "/flavors"
+
     def __init__(self):
         CliCommand.__init__(self, "Show available flavors for the project")
 
     @handle_command_error
     def run(self):
-        flavors = self.get("/flavors/detail")
+        flavors = self.get("/detail")
         for flv in flavors["flavors"]:
             sys.stdout.write("{id}: {name} ram:{ram} vcpus:{vcpus} swap:{swap} disc:{disk}\n".format(**flv))
 
 
 class ImagesCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+
+    RESOURCE = "/images"
+
     def __init__(self):
         super(ImagesCommand, self).__init__("List images available for the project")
 
     @handle_command_error
     def run(self):
-        images = self.get("/images/detail")
+        images = self.get("/detail")
         for img in ifilter(self.__filter_images, images["images"]):
             sys.stdout.write("{id}: {name} {metadata[architecture]}\n".format(**img))
 
@@ -123,10 +153,64 @@ class ImagesCommand(CliCommand):
             )
 
 
-__all__ = [
-    "CliCommand",
-    "subcommand",
-    "add_argument",
-    "FlavorsCommand",
-    "ImagesCommand"
-]
+class SshKeysCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+
+    RESOURCE = "/os-keypairs"
+
+    def __init__(self):
+        super(SshKeysCommand, self).__init__("Manage SSH Key Pairs")
+
+    @subcommand("Register existing key")
+    @add_argument("keyname", help="Key registration name")
+    @add_argument("public_key", type=file, help="SSH Public Key file")
+    def register(self):
+        print self.options
+        request = {
+            "keypair": {
+                "name": self.options.keyname,
+                "public_key": self.options.public_key.read()
+            }
+        }
+        #noinspection PyUnresolvedReferences
+        self.post("", request)
+
+    @subcommand("Generate a new SSH Key Pair (Private key will be printed to standard output)")
+    @add_argument("key", help="A new key name")
+    def generate(self):
+        request = {
+            "keypair": {
+                "name": self.options.key
+            }
+        }
+        #noinspection PyUnresolvedReferences
+        keypair = self.post("", request)
+        sys.stdout.write(keypair["keypair"]["private_key"])
+
+    @subcommand("Remove SSH Key from OpenStack")
+    @add_argument("key", help="Existing key name")
+    def remove(self):
+        #noinspection PyUnresolvedReferences
+        self.delete("/{0}".format(self.options.key))
+
+    @subcommand("List existing keys")
+    def list(self):
+        keys = self.get("")
+        for key in keys["keypairs"]:
+            sys.stdout.write("{keypair[name]}: {keypair[fingerprint]}\n".format(**key))
+
+    @subcommand("Print public key to standard output", "print-public")
+    @add_argument("key", help="Existing key name")
+    def print_public(self):
+        keys = self.get("")
+        for key in keys["keypairs"]:
+            if key["keypair"]["name"] == self.options.key:
+                sys.stdout.write(key["keypair"]["public_key"])
+                return
+        raise CommandError(1, "key not found")
+
+    @handle_command_error
+    def run(self):
+        self.parse_args()
+        self.auth()
+        self.options.subcommand()
