@@ -1,41 +1,5 @@
 #!/usr/bin/python
 
-from itertools import ifilter
-import sys
-import os
-import argparse
+from nova2ools import ImagesCommand
 
-from nova2ools import *
-
-class ImagesCommand(object):
-    def __init__(self, user, access_key, project):
-        self.__client = Client()
-        self.__user = user
-        self.__access_key = access_key
-        self.__project = project
-
-    def auth(self):
-        self.__client.auth(self.__user, self.__access_key, self.__project)
-
-    def list(self):
-        images = self.__client.get("/images/detail")
-        for img in ifilter(self.__filter_images, images["images"]):
-            sys.stdout.write("{id}: {name} {metadata[architecture]}\n".format(**img))
-
-    @handle_command_error
-    def main(self):
-        self.auth()
-        self.list()
-
-    @staticmethod
-    def __filter_images(img):
-        return (
-            img["name"] is not None
-            and img["status"] == "ACTIVE"
-        )
-
-parser = argparse.ArgumentParser(description="Show available image for the project")
-parser.add_argument("project", help="OpenStack Project(Tenant) name")
-
-options = parser.parse_args()
-ImagesCommand(os.environ['NOVA_USERNAME'], os.environ['NOVA_API_KEY'], options.project).main()
+ImagesCommand().run()
