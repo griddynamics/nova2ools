@@ -5,11 +5,11 @@ import sys
 import os
 import argparse
 
-import c4gd2ools
+from nova2ools import *
 
 class ImagesCommand(object):
     def __init__(self, user, access_key, project):
-        self.__client = c4gd2ools.Client()
+        self.__client = Client()
         self.__user = user
         self.__access_key = access_key
         self.__project = project
@@ -22,6 +22,11 @@ class ImagesCommand(object):
         for img in ifilter(self.__filter_images, images["images"]):
             sys.stdout.write("{id}: {name} {metadata[architecture]}\n".format(**img))
 
+    @handle_command_error
+    def main(self):
+        self.auth()
+        self.list()
+
     @staticmethod
     def __filter_images(img):
         return (
@@ -30,8 +35,7 @@ class ImagesCommand(object):
         )
 
 parser = argparse.ArgumentParser(description="Show available image for the project")
-parser.add_argument("project")
+parser.add_argument("project", help="OpenStack Project(Tenant) name")
+
 options = parser.parse_args()
-cmd = ImagesCommand(os.environ['NOVA_USERNAME'], os.environ['NOVA_API_KEY'], options.project)
-cmd.auth()
-cmd.list()
+ImagesCommand(os.environ['NOVA_USERNAME'], os.environ['NOVA_API_KEY'], options.project).main()

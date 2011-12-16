@@ -23,7 +23,7 @@ class Client(object):
         self.__management_url = resp.getheader("X-Server-Management-Url")
         self.__management_path = urlparse(self.__management_url).path
 
-    def get(self, path, params=None):
+    def get(self, path):
         self.__client.request("GET", self.__management_path + path, headers=self.__auth_headers())
         resp = self.__client.getresponse()
         return self.__validate_response(resp)
