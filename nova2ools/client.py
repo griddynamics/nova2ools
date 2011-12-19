@@ -71,7 +71,8 @@ class Client(object):
         if response.status == 204: # No Content
             return None
         if response.status == 202: # Accepted
-            return None
+            response = json.loads(response_content)
+            return response
         raise CommandError(1, "Unhandled response code: %s (%s)" % (response.status, response.reason))
 
     def __auth_headers(self):

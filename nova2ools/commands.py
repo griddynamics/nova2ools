@@ -1,3 +1,4 @@
+import base64
 import os
 import sys
 
@@ -89,6 +90,29 @@ class CliCommand(object):
                 subparser.add_argument(*arg[0], **arg[1])
             subparser.set_defaults(subcommand=attr)
         return parser
+
+    def get_server_by_name(self, name):
+        servers = self.client.get("/servers/detail?name={0}".format(name))["servers"]
+        if len(servers) < 1:
+            raise CommandError(1, "VM `{0}` is not found".format(name))
+        if len(servers) > 1:
+            sys.stderr.write("Warning: more then one({0}) server with `{1}` name\n".format(len(servers), name))
+        return servers[0]
+
+    def get_flavor_by_name(self, name):
+        flavors = self.client.get("/flavors/detail")["flavors"]
+        for flv in flavors:
+            if flv["name"] == name:
+                return flv
+        raise CommandError(1, "Flavor `{0}` is not found".format(name))
+
+    def get_image_by_name(self, name):
+        images = self.client.get("/images/detail?name={0}".format(name))["images"]
+        if len(images) < 1:
+            raise CommandError(1, "VM `{0}` is not found".format(name))
+        if len(images) > 1:
+            sys.stderr.write("Warning: more then one({0}) image with `{1}` name\n".format(len(images), name))
+        return images[0]
 
 
 @export
@@ -217,3 +241,134 @@ class SshKeysCommand(CliCommand):
         self.parse_args()
         self.auth()
         self.options.subcommand()
+
+
+class VmsCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+
+    RESOURCE = "/servers"
+
+    def __init__(self):
+        super(VmsCommand, self).__init__("Manage Virtual Machines")
+        self.__images = {}
+        self.__flavors = {}
+
+    @subcommand("Remove Virtual Machine")
+    @add_argument("vm", help="VM name")
+    def remove(self):
+        srv = self.get_server_by_name(self.options.vm)
+        #noinspection PyUnresolvedReferences
+        self.delete("/{0}".format(srv["id"]))
+
+    @subcommand("Show information about VM")
+    @add_argument("vm", help="VM name")
+    def show(self):
+        srv = self.get_server_by_name(self.options.vm)
+        self.__print_srv_details(srv)
+
+    @subcommand("Spawn a new VM")
+    @add_argument("-n", "--name", help="VM name")
+    @add_argument("-i", "--image", required=True, help="Image to use")
+    @add_argument("-f", "--flavor", required=True, help="Flavor to use")
+    @add_argument("-p", "--password", help="Administrator Password")
+    @add_argument("-m", "--metadata", nargs="*", help="Server Metadata")
+    @add_argument("-k", "--keyname", help="Registered SSH Key Name")
+    @add_argument("-j", "--inject", nargs="*", help="Inject file to image (personality)")
+    @add_argument("-s", "--security-groups", nargs="*", help="Inject file to image (personality)")
+    def spawn(self):
+        img = self.get_image_by_name(self.options.image)
+        flv = self.get_flavor_by_name(self.options.flavor)
+        srvDesc = {
+            "name": self.options.name,
+            "imageRef": img["links"][0]["href"],
+            "flavorRef": flv["id"]
+        }
+        if self.options.password is not None:
+            srvDesc["adminPass"] = self.options.password
+        if self.options.metadata is not None:
+            srvDesc["metadata"] = self.__generate_metadata_dict(self.options.metadata)
+        if self.options.keyname is not None:
+            srvDesc["key_name"] = self.options.keyname
+        if self.options.inject is not None:
+            srvDesc["personality"] = self.__generate_personality(self.options.inject)
+        if self.options.security_groups is not None:
+            srvDesc["security_groups"] = dict(({"name": i} for i in self.options.security_groups))
+        #noinspection PyUnresolvedReferences
+        srv = self.post("", {"server": srvDesc})["server"]
+        self.__print_srv_details(srv)
+
+    @subcommand("List spawned VMs")
+    def list(self):
+        #noinspection PyUnresolvedReferences
+        response = self.get("/detail")
+        servers = response["servers"]
+        for srv in servers:
+            self.__print_srv_details(srv)
+
+    @handle_command_error
+    def run(self):
+        self.parse_args()
+        self.auth()
+        self.options.subcommand()
+
+    def get_image_detail(self, id):
+        return self.__get_detail_cached(id, "/images", self.__images)["image"]
+
+    def get_flavor_detail(self, id):
+        return self.__get_detail_cached(id, "/flavors", self.__flavors)["flavor"]
+
+    def __get_detail_cached(self, id, prefix, cache):
+        if id not in cache:
+            cache[id] = self.client.get("{0}/{1}".format(prefix, id))
+        return cache[id]
+
+    def __print_srv_details(self, srv):
+        print srv
+        img = self.get_image_detail(srv["image"]["id"])
+        flv = self.get_flavor_detail(srv["flavor"]["id"])
+        print "{name}: user:{user_id} project:{tenant_id} key:{key_name} {status}".format(**srv)
+        if "adminPass" in srv:
+            print "  Admin Password: {0}".format(srv["adminPass"])
+        first = True
+        for net_id, addrs in srv["addresses"].items():
+            for addr in addrs:
+                type = "float"
+                if addr["fixed"]:
+                    type = "fixed"
+                if first:
+                    prefix = "       Addresses:"
+                    first = False
+                else:
+                    prefix = "                 "
+                print "{prefix} {addr[addr]}(v{addr[version]}) net:{net_id} {type}".format(**locals())
+        print "           Image: {name}({metadata[architecture]})".format(**img)
+        print "          Flavor: {name} ram:{ram} vcpus:{vcpus} disk:{disk} swap:{swap}".format(**flv)
+        if len(srv["metadata"]) > 0:
+            first = True
+            for key, value in srv["metadata"].items():
+                if first:
+                    print "        Metadata: {0}={1}".format(key, value)
+                    first = False
+                else:
+                    print "                  {0}={1}".format(key, value)
+
+    @staticmethod
+    def __generate_metadata_dict(metadata):
+        def split(value):
+            eq_index = value.index("=")
+            return value[:eq_index], value[eq_index + 1:]
+
+        return dict((split(i) for i in metadata))
+
+    @staticmethod
+    def __generate_personality(inject):
+        def split(value):
+            eq_index = value.index("=")
+            path = value[eq_index + 1:]
+            path = os.path.abspath(os.path.expanduser(path))
+            return {
+                "path": value[:eq_index],
+                "contents": base64.b64encode(str(open(path).read()))
+            }
+
+        return [split(i) for i in inject]
