@@ -126,6 +126,7 @@ class FlavorsCommand(CliCommand):
 
     @handle_command_error
     def run(self):
+        #noinspection PyUnresolvedReferences
         flavors = self.get("/detail")
         for flv in flavors["flavors"]:
             sys.stdout.write("{id}: {name} ram:{ram} vcpus:{vcpus} swap:{swap} disc:{disk}\n".format(**flv))
@@ -141,6 +142,7 @@ class ImagesCommand(CliCommand):
 
     @handle_command_error
     def run(self):
+        #noinspection PyUnresolvedReferences
         images = self.get("/detail")
         for img in ifilter(self.__filter_images, images["images"]):
             sys.stdout.write("{id}: {name} {metadata[architecture]}\n".format(**img))
@@ -165,7 +167,6 @@ class SshKeysCommand(CliCommand):
     @add_argument("keyname", help="Key registration name")
     @add_argument("public_key", type=file, help="SSH Public Key file")
     def register(self):
-        print self.options
         request = {
             "keypair": {
                 "name": self.options.keyname,
@@ -195,6 +196,7 @@ class SshKeysCommand(CliCommand):
 
     @subcommand("List existing keys")
     def list(self):
+        #noinspection PyUnresolvedReferences
         keys = self.get("")
         for key in keys["keypairs"]:
             sys.stdout.write("{keypair[name]}: {keypair[fingerprint]}\n".format(**key))
@@ -202,6 +204,7 @@ class SshKeysCommand(CliCommand):
     @subcommand("Print public key to standard output", "print-public")
     @add_argument("key", help="Existing key name")
     def print_public(self):
+        #noinspection PyUnresolvedReferences
         keys = self.get("")
         for key in keys["keypairs"]:
             if key["keypair"]["name"] == self.options.key:
