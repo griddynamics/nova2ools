@@ -332,7 +332,7 @@ class VmsCommand(CliCommand):
     def __print_srv_details(self, srv):
         img = self.get_image_detail(srv["image"]["id"])
         flv = self.get_flavor_detail(srv["flavor"]["id"])
-        print "{name}: user:{user_id} project:{tenant_id} key:{key_name} {status}".format(**srv)
+        print "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_id} key:{key_name} {status}".format(**srv)
         if "adminPass" in srv:
             print "  Admin Password: {0}".format(srv["adminPass"])
         first = True
