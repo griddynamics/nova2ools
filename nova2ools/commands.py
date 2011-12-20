@@ -114,6 +114,13 @@ class CliCommand(object):
             sys.stderr.write("Warning: more then one({0}) image with `{1}` name\n".format(len(images), name))
         return images[0]
 
+    def get_security_group_by_name(self, name):
+        sgroups = self.client.get("/os-security-groups")["security_groups"]
+        for sg in sgroups:
+            if sg["name"] == name:
+                return sg
+        raise CommandError(1, "Security Group `{0}` is not found".format(name))
+
 
 @export
 def subcommand(help, name=None):
@@ -267,7 +274,7 @@ class VmsCommand(CliCommand):
         self.__print_srv_details(srv)
 
     @subcommand("Spawn a new VM")
-    @add_argument("-n", "--name", help="VM name")
+    @add_argument("-n", "--name", required=True, help="VM name")
     @add_argument("-i", "--image", required=True, help="Image to use")
     @add_argument("-f", "--flavor", required=True, help="Flavor to use")
     @add_argument("-p", "--password", help="Administrator Password")
@@ -372,3 +379,145 @@ class VmsCommand(CliCommand):
             }
 
         return [split(i) for i in inject]
+
+
+class SecGroupsCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+
+    RESOURCE = "/os-security-groups"
+
+    def __init__(self):
+        super(SecGroupsCommand, self).__init__("Manage Security Groups (Firewall)")
+
+    @subcommand("Create Security Group")
+    @add_argument("name", help="Security Group Name")
+    @add_argument("description", help="Security Group Description")
+    def create(self):
+        request = {
+            "security_group": {
+                "name": self.options.name,
+                "description": self.options.description
+            }
+        }
+        #noinspection PyUnresolvedReferences
+        self.post("", request)
+
+    @subcommand("List Security Groups")
+    def list(self):
+        #noinspection PyUnresolvedReferences
+        for sg in self.get("")["security_groups"]:
+            sys.stdout.write(self.__format(sg))
+
+    @subcommand("Show Security Group Details")
+    @add_argument("name", help="Security Group Name")
+    def show(self):
+        sg = self.get_security_group_by_name(self.options.name)
+        sys.stdout.write(self.__format(sg))
+
+    @subcommand("Delete Security Group")
+    @add_argument("name", help="Security Group Name")
+    def remove(self):
+        sg = self.get_security_group_by_name(self.options.name)
+        #noinspection PyUnresolvedReferences
+        self.delete("/{id}".format(**sg))
+
+    @subcommand("Add Rule to Security Group", "add-rule")
+    @add_argument("group", help="Security Group to add a new Rule")
+    @add_argument("--port", help="Single IP Port or Range in FROM:TO format (ignored for `ICMP` protocol)")
+    @add_argument("-p", "--protocol", required=True, help="IP Protocol (`TCP`, `UDP` or `ICMP`)")
+    @add_argument("-a", "--from-address", help="IP Subnet in CIRD notation (IP/MASK) to allow access from")
+    def add_rule(self):
+        group = self.get_security_group_by_name(self.options.group)
+        if self.options.port is not None:
+            if ":" in self.options.port:
+                from_port, to_port = self.options.port.split(":")
+            else:
+                from_port = to_port = self.options.port
+        else:
+            from_port = -1
+            to_port = -1
+        rule = {
+            "parent_group_id": group["id"],
+            "from_port": from_port,
+            "to_port": to_port,
+            "ip_protocol": self.options.protocol,
+            "cidr": self.options.from_address
+        }
+        self.client.post("/os-security-group-rules", {"security_group_rule": rule})
+
+    @subcommand("Allow connections from VMs of different Security Group", "allow-group")
+    @add_argument("group", help="Security Group where a Rule will be created")
+    @add_argument("allow_group", metavar="allow-group", help="Security Group where a Rule will be created")
+    def allow_group(self):
+        group = self.get_security_group_by_name(self.options.group)
+        rule = {
+            "parent_group_id": group["id"],
+        }
+        allow_group = self.get_security_group_by_name(self.options.allow_group)
+        rule["group_id"] = allow_group["id"]
+        self.client.post("/os-security-group-rules", {"security_group_rule": rule})
+
+    @subcommand("Remove rule from Security Group by ID", "remove-rule")
+    @add_argument("id", help="Rule ID")
+    def remove_rule(self):
+        self.client.delete("/os-security-group-rules/{0}".format(self.options.id))
+
+    @subcommand("Remove all rules from Security Group", "clean-group")
+    @add_argument("name", help="Security Group Name")
+    def clean_group(self):
+        sg = self.get_security_group_by_name(self.options.name)
+        for rule in sg["rules"]:
+            self.client.delete("/os-security-group-rules/{id}".format(**rule))
+
+    @subcommand("Remove all Security Groups except `default` and all rules in `deafult` Security Group")
+    def clean(self):
+        #noinspection PyUnresolvedReferences
+        groups = self.get("")["security_groups"]
+        for sg in groups:
+            if sg["name"] == "default":
+                continue
+            #noinspection PyUnresolvedReferences
+            self.delete("/{id}".format(**sg))
+        sg = self.get_security_group_by_name("default")
+        for rule in sg["rules"]:
+            self.client.delete("/os-security-group-rules/{id}".format(**rule))
+
+    @handle_command_error
+    def run(self):
+        self.parse_args()
+        self.auth()
+        self.options.subcommand()
+
+    @classmethod
+    def __format(cls, sg):
+        result = []
+        put = result.append
+        put("{name}({tenant_id}): {description}\n".format(**sg))
+        for rule in sg["rules"]:
+            if len(rule["group"]) > 0:
+                fmt = "    {id}: GROUP({group[name]})\n"
+            elif rule["ip_protocol"] == "ICMP":
+                fmt = "    {id}: ICMP\n"
+            elif rule["from_port"] == rule["to_port"]:
+                fmt = "    {id}: {ip_protocol}({to_port})\n"
+            else:
+                fmt = "    {id}: {ip_protocol}({from_port}:{to_port})\n"
+            put(fmt.format(**rule))
+        return "".join(result)
+
+
+class ExtensionsCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+
+    RESOURCE = "/extensions"
+
+    def __init__(self):
+        super(ExtensionsCommand, self).__init__("List all available extensions")
+
+    @handle_command_error
+    def run(self):
+        self.parse_args()
+        self.auth()
+        #noinspection PyUnresolvedReferences
+        for ext in self.get("")["extensions"]:
+            sys.stdout.write("{name}({alias}): {description}\n".format(**ext))

@@ -62,8 +62,8 @@ class Client(object):
             sys.stderr.write(response_content)
             sys.stderr.write("\n\n")
         if response.status == 200:
-            response = json.loads(response_content)
-            return response
+            json_response = json.loads(response_content)
+            return json_response
         if response.status == 404:
             raise CommandError(1, response.reason)
         if response.status == 401:
@@ -71,8 +71,14 @@ class Client(object):
         if response.status == 204: # No Content
             return None
         if response.status == 202: # Accepted
-            response = json.loads(response_content)
-            return response
+            try:
+                json_response = json.loads(response_content)
+            except ValueError:
+                return response_content
+            return json_response
+        if response.status == 400: # Bad Request
+            json_response = json.loads(response_content)
+            raise CommandError(1, "Bad Request: {0}".format(json_response["badRequest"]["message"]))
         raise CommandError(1, "Unhandled response code: %s (%s)" % (response.status, response.reason))
 
     def __auth_headers(self):
