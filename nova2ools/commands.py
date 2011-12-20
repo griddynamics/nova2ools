@@ -281,7 +281,7 @@ class VmsCommand(CliCommand):
     @add_argument("-m", "--metadata", nargs="*", help="Server Metadata")
     @add_argument("-k", "--keyname", help="Registered SSH Key Name")
     @add_argument("-j", "--inject", nargs="*", help="Inject file to image (personality)")
-    @add_argument("-s", "--security-groups", nargs="*", help="Inject file to image (personality)")
+    @add_argument("-s", "--security-groups", nargs="*", help="Apply security groups to a new VM")
     def spawn(self):
         img = self.get_image_by_name(self.options.image)
         flv = self.get_flavor_by_name(self.options.flavor)
@@ -299,7 +299,7 @@ class VmsCommand(CliCommand):
         if self.options.inject is not None:
             srvDesc["personality"] = self.__generate_personality(self.options.inject)
         if self.options.security_groups is not None:
-            srvDesc["security_groups"] = dict(({"name": i} for i in self.options.security_groups))
+            srvDesc["security_groups"] = [{"name": i} for i in self.options.security_groups]
         #noinspection PyUnresolvedReferences
         srv = self.post("", {"server": srvDesc})["server"]
         self.__print_srv_details(srv)
@@ -330,7 +330,6 @@ class VmsCommand(CliCommand):
         return cache[id]
 
     def __print_srv_details(self, srv):
-        print srv
         img = self.get_image_detail(srv["image"]["id"])
         flv = self.get_flavor_detail(srv["flavor"]["id"])
         print "{name}: user:{user_id} project:{tenant_id} key:{key_name} {status}".format(**srv)
