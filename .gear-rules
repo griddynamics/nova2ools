@@ -1,0 +1,1 @@
+tar: . name=@name@-@version@.tar base=@name@
