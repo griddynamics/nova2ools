@@ -1,9 +1,11 @@
 from glob import glob
 from setuptools import setup, find_packages
 
+from nova2ools import VERSION
+
 setup(
     name='nova2ools',
-    version='0.0.1',
+    version=VERSION,
     license='GNU GPL v3.0',
     description='Utilities to work with OpenStack',
     author='Dmitry Maslennikov (GridDynamics Openstack Core Team)',

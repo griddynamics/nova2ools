@@ -1,3 +1,5 @@
+VERSION = "0.0.1"
+
 #noinspection PyUnresolvedReferences
 from client import Client
 #noinspection PyUnresolvedReferences

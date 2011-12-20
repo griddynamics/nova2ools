@@ -9,6 +9,7 @@ from itertools import ifilter
 from client import Client
 from exceptions import CommandError
 from exceptions import handle_command_error
+from nova2ools import VERSION
 
 
 __all__ = []
@@ -44,7 +45,15 @@ class CliCommand(object):
         (("--username", "-u"), {"help": "OpenStack user name"}),
         (("--api-key", "-k"), {"help": "OpenStack API secret key"}),
         (("--project", "-p"), {"help": "OpenStack Project(Tenant) name"}),
-        (("--debug",), {"action": "store_true", "help": "Run in debug mode"})
+        (("--debug",), {"action": "store_true", "help": "Run in debug mode"}),
+        (
+            ("--version", "-v"),
+            {
+                "action": "version",
+                "version": "Nova2ools Version: {0}".format(VERSION),
+                "help": "Show version"
+            }
+        )
     ]
     __common_defaults = {
         "username": os.environ.get("NOVA_USERNAME"),
@@ -300,6 +309,7 @@ class VmsCommand(CliCommand):
             srvDesc["personality"] = self.__generate_personality(self.options.inject)
         if self.options.security_groups is not None:
             srvDesc["security_groups"] = [{"name": i} for i in self.options.security_groups]
+
         #noinspection PyUnresolvedReferences
         srv = self.post("", {"server": srvDesc})["server"]
         self.__print_srv_details(srv)
@@ -475,6 +485,7 @@ class SecGroupsCommand(CliCommand):
         for sg in groups:
             if sg["name"] == "default":
                 continue
+
             #noinspection PyUnresolvedReferences
             self.delete("/{id}".format(**sg))
         sg = self.get_security_group_by_name("default")
