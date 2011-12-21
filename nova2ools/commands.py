@@ -254,8 +254,6 @@ class SshKeysCommand(CliCommand):
 
     @handle_command_error
     def run(self):
-        self.parse_args()
-        self.auth()
         self.options.subcommand()
 
 
@@ -324,8 +322,6 @@ class VmsCommand(CliCommand):
 
     @handle_command_error
     def run(self):
-        self.parse_args()
-        self.auth()
         self.options.subcommand()
 
     def get_image_detail(self, id):
@@ -494,8 +490,6 @@ class SecGroupsCommand(CliCommand):
 
     @handle_command_error
     def run(self):
-        self.parse_args()
-        self.auth()
         self.options.subcommand()
 
     @classmethod
@@ -526,8 +520,6 @@ class ExtensionsCommand(CliCommand):
 
     @handle_command_error
     def run(self):
-        self.parse_args()
-        self.auth()
         #noinspection PyUnresolvedReferences
         for ext in self.get("")["extensions"]:
             sys.stdout.write("{name}({alias}): {description}\n".format(**ext))
