@@ -11,7 +11,7 @@ Group:            Development/Languages/Python
 
 Source0:          %{name}-%{version}.tar
 BuildRoot:        %{_tmppath}/%{name}-%{version}-build
-BuildRequires:    python-setuptools
+BuildRequires:    python-setuptools, python-argparse
 BuildArch:        noarch
 Requires:         python-argparse
 
@@ -19,21 +19,19 @@ Requires:         python-argparse
 Set of command line utilities to work with OpenStack.
 
 %prep
-%setup -q -n %{name}
+%setup -q -n %{name}-%{version}
 
 %build
 %{__python} setup.py build
 
 %install
-%{__python} setup.py install -O1 --skip-build --prefix=%{_prefix} --root=%{buildroot}
+%{__python} setup.py install -O1 --skip-build --prefix=%{_prefix} --root=%{buildroot} --record=INSTALLED_FILES
 
 %clean
 %__rm -rf %{buildroot}
 
-%files
+%files -f INSTALLED_FILES
 %defattr(-,root,root,-)
-%{python_sitelib}/%{mod_name}
-%{_usr}/bin/*
 
 %changelog
 * Tue Dec 20 2011 Dmitry Maslennikov <dmaslennikov at griddynamics.com>
