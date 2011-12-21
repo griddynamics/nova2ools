@@ -1,7 +1,7 @@
 VERSION = "0.0.1"
 
 #noinspection PyUnresolvedReferences
-from client import Client
+from client import NovaApiClient
 #noinspection PyUnresolvedReferences
 from exceptions import CommandError
 #noinspection PyUnresolvedReferences

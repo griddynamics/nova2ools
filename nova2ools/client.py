@@ -1,29 +1,51 @@
 import httplib
 import json
 import sys
+import os
 
 from urlparse import urlparse
 
 from exceptions import CommandError
 
-class Client(object):
-    def __init__(self):
-        self.__client = httplib.HTTPConnection("cc.c4gd.griddynamics.net", 8774)
-        self.__debug = False
+class NovaApiClient(object):
+    ARGUMENTS = [
+        (("--host",), {"help": "Nova API Host (with port)"}),
+        (("--username", "-u"), {"help": "OpenStack user name"}),
+        (("--api-key", "-k"), {"help": "OpenStack API secret key"}),
+        (("--project", "-p"), {"help": "OpenStack Project(Tenant) name"}),
+    ]
 
-    def set_debug(self, value):
-        self.__debug = value
-        if value:
+    DEFAULTS = {
+        "username": os.environ.get("NOVA_USERNAME"),
+        "api_key": os.environ.get("NOVA_API_KEY"),
+        "project": os.environ.get("NOVA_PROJECT_ID"),
+    }
+
+    __nova_url = os.environ.get("NOVA_URL")
+    if __nova_url is not None:
+        DEFAULTS["host"] = urlparse(__nova_url)[1]
+
+
+    def __init__(self, options):
+        if options.host is None:
+            raise CommandError(1, "Nova API Host is not configured")
+        if options.username is None:
+            raise CommandError(1, "OpenStack user name is undefined")
+        if options.api_key is None:
+            raise CommandError(1, "OpenStack API secret key is undefined")
+        if options.project is None:
+            raise CommandError(1, "OpenStack Project(Tenant) name is undefined")
+        self.__client = httplib.HTTPConnection(options.host)
+        self.options = options
+        if self.options.debug:
             self.__client.set_debuglevel(100)
-        else:
-            self.__client.set_debuglevel(0)
+        self.auth()
 
-    def auth(self, user, access_key, project_id):
-        self.__project_id = project_id
+    def auth(self):
         auth_headers = {
-            "X-Auth-User": user,
-            "X-Auth-Key": access_key,
-            "X-Auth-Project-Id": project_id
+            "X-Auth-User": self.options.username,
+            "X-Auth-Key": self.options.api_key,
+            "X-Auth-Project-Id": self.options.project
         }
         self.__client.request("GET", "/v1.1", headers=auth_headers)
         resp = self.__client.getresponse()
@@ -57,7 +79,7 @@ class Client(object):
 
     def __validate_response(self, response):
         response_content = response.read()
-        if self.__debug:
+        if self.options.debug:
             sys.stderr.write("Response:\n")
             sys.stderr.write(response_content)
             sys.stderr.write("\n\n")
@@ -83,6 +105,6 @@ class Client(object):
 
     def __auth_headers(self):
         return {
-            "X-Auth=Project-Id": self.__project_id,
+            "X-Auth=Project-Id": self.options.project,
             "X-Auth-Token": self.__token
         }

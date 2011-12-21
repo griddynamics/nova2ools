@@ -6,7 +6,7 @@ from argparse import ArgumentParser
 from inspect import ismethod
 from itertools import ifilter
 
-from client import Client
+from client import NovaApiClient
 from exceptions import CommandError
 from exceptions import handle_command_error
 from nova2ools import VERSION
@@ -24,17 +24,6 @@ def export(function):
 def CliCommandMetaclass(name, bases, dict):
     global __all__
     __all__.append(name)
-
-    for i in ("get", "put", "post", "delete"):
-        def gen_method(original_method, path_part):
-            def method(self, path, *args, **kwargs):
-                return original_method(self.client, path_part + path, *args, **kwargs)
-
-            method.__name__ = original_method.__name__
-            method.__doc__ = getattr(original_method, "__doc__")
-            return method
-
-        dict[i] = gen_method(getattr(Client, i), dict["RESOURCE"])
     return type(name, bases, dict)
 
 
@@ -42,10 +31,7 @@ __all__.append("CliCommand")
 
 class CliCommand(object):
     __common_args = [
-        (("--username", "-u"), {"help": "OpenStack user name"}),
-        (("--api-key", "-k"), {"help": "OpenStack API secret key"}),
-        (("--project", "-p"), {"help": "OpenStack Project(Tenant) name"}),
-        (("--debug",), {"action": "store_true", "help": "Run in debug mode"}),
+        (("--debug",), {"default": False, "action": "store_true", "help": "Run in debug mode"}),
         (
             ("--version", "-v"),
             {
@@ -55,39 +41,38 @@ class CliCommand(object):
             }
         )
     ]
-    __common_defaults = {
-        "username": os.environ.get("NOVA_USERNAME"),
-        "api_key": os.environ.get("NOVA_API_KEY"),
-        "project": os.environ.get("NOVA_PROJECT_ID"),
-        "debug": False
-    }
+    __common_defaults = {}
 
-    def __init__(self, help):
+    @handle_command_error
+    def __init__(self, help, client_class=NovaApiClient):
         self.__help = help
-        self.__parser = self.__generate_options_parser()
+        self.__parser = self.__generate_options_parser(NovaApiClient)
         self.parse_args()
-        self.client = Client()
-        self.client.set_debug(self.options.debug)
-        self.auth()
+        self.client = client_class(self.options)
+
+    def get(self, path=""):
+        return self.client.get(getattr(self, "RESOURCE", "") + path)
+
+    def post(self, path, body):
+        return self.client.post(getattr(self, "RESOURCE", "") + path, body)
+
+    def put(self, path, body):
+        return self.client.put(getattr(self, "RESOURCE", "") + path, body)
+
+    def delete(self, path):
+        return self.client.delete(getattr(self, "RESOURCE", "") + path)
 
     def parse_args(self):
         self.options = self.__parser.parse_args()
 
-    def auth(self):
-        opts = self.options
-        if opts.username is None:
-            raise CommandError(1, "OpenStack user name is undefined")
-        if opts.api_key is None:
-            raise CommandError(1, "OpenStack API secret key is undefined")
-        if opts.project is None:
-            raise CommandError(1, "OpenStack Project(Tenant) name is undefined")
-        self.client.auth(opts.username, opts.api_key, opts.project)
-
-    def __generate_options_parser(self):
+    def __generate_options_parser(self, client):
         parser = ArgumentParser(description=self.__help)
         for i in self.__common_args:
             parser.add_argument(*i[0], **i[1])
+        for i in client.ARGUMENTS:
+            parser.add_argument(*i[0], **i[1])
         parser.set_defaults(**self.__common_defaults)
+        parser.set_defaults(**client.DEFAULTS)
         subparsers = None
         for attr in (getattr(self, i) for i in dir(self) if not i.startswith("_")):
             if not ismethod(attr) or not getattr(attr, "subcommand", False):
@@ -166,7 +151,6 @@ class FlavorsCommand(CliCommand):
 
     @handle_command_error
     def run(self):
-        #noinspection PyUnresolvedReferences
         flavors = self.get("/detail")
         for flv in flavors["flavors"]:
             sys.stdout.write("{id}: {name} ram:{ram} vcpus:{vcpus} swap:{swap} disc:{disk}\n".format(**flv))
@@ -182,7 +166,6 @@ class ImagesCommand(CliCommand):
 
     @handle_command_error
     def run(self):
-        #noinspection PyUnresolvedReferences
         images = self.get("/detail")
         for img in ifilter(self.__filter_images, images["images"]):
             sys.stdout.write("{id}: {name} {metadata[architecture]}\n".format(**img))
@@ -213,7 +196,6 @@ class SshKeysCommand(CliCommand):
                 "public_key": self.options.public_key.read()
             }
         }
-        #noinspection PyUnresolvedReferences
         self.post("", request)
 
     @subcommand("Generate a new SSH Key Pair (Private key will be printed to standard output)")
@@ -224,28 +206,24 @@ class SshKeysCommand(CliCommand):
                 "name": self.options.key
             }
         }
-        #noinspection PyUnresolvedReferences
         keypair = self.post("", request)
         sys.stdout.write(keypair["keypair"]["private_key"])
 
     @subcommand("Remove SSH Key from OpenStack")
     @add_argument("key", help="Existing key name")
     def remove(self):
-        #noinspection PyUnresolvedReferences
         self.delete("/{0}".format(self.options.key))
 
     @subcommand("List existing keys")
     def list(self):
-        #noinspection PyUnresolvedReferences
-        keys = self.get("")
+        keys = self.get()
         for key in keys["keypairs"]:
             sys.stdout.write("{keypair[name]}: {keypair[fingerprint]}\n".format(**key))
 
     @subcommand("Print public key to standard output", "print-public")
     @add_argument("key", help="Existing key name")
     def print_public(self):
-        #noinspection PyUnresolvedReferences
-        keys = self.get("")
+        keys = self.get()
         for key in keys["keypairs"]:
             if key["keypair"]["name"] == self.options.key:
                 sys.stdout.write(key["keypair"]["public_key"])
@@ -271,7 +249,6 @@ class VmsCommand(CliCommand):
     @add_argument("vm", help="VM name")
     def remove(self):
         srv = self.get_server_by_name(self.options.vm)
-        #noinspection PyUnresolvedReferences
         self.delete("/{0}".format(srv["id"]))
 
     @subcommand("Show information about VM")
@@ -307,14 +284,11 @@ class VmsCommand(CliCommand):
             srvDesc["personality"] = self.__generate_personality(self.options.inject)
         if self.options.security_groups is not None:
             srvDesc["security_groups"] = [{"name": i} for i in self.options.security_groups]
-
-        #noinspection PyUnresolvedReferences
         srv = self.post("", {"server": srvDesc})["server"]
         self.__print_srv_details(srv)
 
     @subcommand("List spawned VMs")
     def list(self):
-        #noinspection PyUnresolvedReferences
         response = self.get("/detail")
         servers = response["servers"]
         for srv in servers:
@@ -404,13 +378,11 @@ class SecGroupsCommand(CliCommand):
                 "description": self.options.description
             }
         }
-        #noinspection PyUnresolvedReferences
         self.post("", request)
 
     @subcommand("List Security Groups")
     def list(self):
-        #noinspection PyUnresolvedReferences
-        for sg in self.get("")["security_groups"]:
+        for sg in self.get()["security_groups"]:
             sys.stdout.write(self.__format(sg))
 
     @subcommand("Show Security Group Details")
@@ -423,7 +395,6 @@ class SecGroupsCommand(CliCommand):
     @add_argument("name", help="Security Group Name")
     def remove(self):
         sg = self.get_security_group_by_name(self.options.name)
-        #noinspection PyUnresolvedReferences
         self.delete("/{id}".format(**sg))
 
     @subcommand("Add Rule to Security Group", "add-rule")
@@ -476,13 +447,10 @@ class SecGroupsCommand(CliCommand):
 
     @subcommand("Remove all Security Groups except `default` and all rules in `deafult` Security Group")
     def clean(self):
-        #noinspection PyUnresolvedReferences
-        groups = self.get("")["security_groups"]
+        groups = self.get()["security_groups"]
         for sg in groups:
             if sg["name"] == "default":
                 continue
-
-            #noinspection PyUnresolvedReferences
             self.delete("/{id}".format(**sg))
         sg = self.get_security_group_by_name("default")
         for rule in sg["rules"]:
@@ -520,6 +488,5 @@ class ExtensionsCommand(CliCommand):
 
     @handle_command_error
     def run(self):
-        #noinspection PyUnresolvedReferences
-        for ext in self.get("")["extensions"]:
+        for ext in self.get()["extensions"]:
             sys.stdout.write("{name}({alias}): {description}\n".format(**ext))
