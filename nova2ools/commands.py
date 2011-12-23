@@ -103,7 +103,7 @@ class CliCommand(object):
     def get_image_by_name(self, name):
         images = self.client.get("/images/detail?name={0}".format(name))["images"]
         if len(images) < 1:
-            raise CommandError(1, "VM `{0}` is not found".format(name))
+            raise CommandError(1, "Image `{0}` is not found".format(name))
         if len(images) > 1:
             sys.stderr.write("Warning: more then one({0}) image with `{1}` name\n".format(len(images), name))
         return images[0]
