@@ -149,11 +149,15 @@ class FlavorsCommand(CliCommand):
     def __init__(self):
         CliCommand.__init__(self, "Show available flavors for the project")
 
-    @handle_command_error
-    def run(self):
+    @subcommand("List available flavors")
+    def list(self):
         flavors = self.get("/detail")
         for flv in flavors["flavors"]:
             sys.stdout.write("{id}: {name} ram:{ram} vcpus:{vcpus} swap:{swap} disc:{disk}\n".format(**flv))
+
+    @handle_command_error
+    def run(self):
+        self.options.subcommand()
 
 
 class ImagesCommand(CliCommand):
@@ -164,11 +168,23 @@ class ImagesCommand(CliCommand):
     def __init__(self):
         super(ImagesCommand, self).__init__("List images available for the project")
 
-    @handle_command_error
-    def run(self):
+    @subcommand("List available images")
+    @add_argument("-m", "--metadata", action="store_true", default=False, help="Include metadata information to output")
+    def list(self):
         images = self.get("/detail")
         for img in ifilter(self.__filter_images, images["images"]):
-            sys.stdout.write("{id}: {name} {metadata[architecture]}\n".format(**img))
+            sys.stdout.write("{id}: {name}\n".format(**img))
+            if self.options.metadata and len(img["metadata"]) > 0:
+                first = True
+                for key, value in img["metadata"].items():
+                    if first:
+                        sys.stdout.write("Metadata: {0} -> {1}\n".format(key, value))
+                        first = False
+                    sys.stdout.write("          {0} -> {1}\n".format(key, value))
+
+    @handle_command_error
+    def run(self):
+        self.options.subcommand()
 
     @staticmethod
     def __filter_images(img):
