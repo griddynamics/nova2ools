@@ -528,35 +528,24 @@ class BillingCommand(CliCommand):
     def run(self):
         self.options.subcommand()
 
-    @subcommand("Get instances statistics")
+    @handle_command_error
+    @subcommand("Get statistics")
     @add_argument("--billing-project", required=False, help="Select project to show statistics")
     @add_argument("--time-period", required=False, help="Set time period")
     @add_argument("--period-start", required=False, help="Set time period start")
     @add_argument("--period-end", required=False, help="Set time period end")
-    def instances(self):
-        params = ["include=instances-long"]
-        self.ask(params)
-
-
-    @subcommand("Get images statistics")
-    @add_argument("--billing-project", required=False, help="Select project to show statistics")
-    @add_argument("--time-period", required=False, help="Set time period")
-    @add_argument("--period-start", required=False, help="Set time period start")
-    @add_argument("--period-end", required=False, help="Set time period end")
-    def images(self):
-        def url_escape(s):
-            return urllib.quote(s)
-
-        params = ["include=images-long"]
-        self.ask(params)
-
-    @subcommand("Get full statistics")
-    @add_argument("--billing-project", required=False, help="Select project to show statistics")
-    @add_argument("--time-period", required=False, help="Set time period")
-    @add_argument("--period-start", required=False, help="Set time period start")
-    @add_argument("--period-end", required=False, help="Set time period end")
-    def full(self):
-        params = ["include=instances-long,images-long"]
+    @add_argument("--instances", required=False, help="Set time period end", action="store_true", default=False)
+    @add_argument("--images", required=False, help="Set time period end", action="store_true", default=False)
+    @add_argument("--long", required=False, help="Set time period end", action="store_true", default=False)
+    def list(self):
+        include = []
+        if self.options.instances:
+            include.append("instances")
+        if self.options.images:
+            include.append("images")
+        if self.options.long:
+            include = [opt + "-long" for opt in include]
+        params = ["include=" + ",".join(include)] if include else []
         self.ask(params)
 
     def ask(self, params):
