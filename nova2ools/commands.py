@@ -1,6 +1,7 @@
 import base64
 import os
 import sys
+import urllib
 
 from argparse import ArgumentParser
 from inspect import ismethod
@@ -527,16 +528,40 @@ class BillingCommand(CliCommand):
     def run(self):
         self.options.subcommand()
 
-    @subcommand("Get statistics")
+    @subcommand("Get instances statistics")
     @add_argument("--billing-project", required=False, help="Select project to show statistics")
     @add_argument("--time-period", required=False, help="Set time period")
     @add_argument("--period-start", required=False, help="Set time period start")
     @add_argument("--period-end", required=False, help="Set time period end")
-    def statistics(self):
-        def url_escape(s):
-            return s
+    def instances(self):
+        params = ["include=instances-long"]
+        self.ask(params)
 
+
+    @subcommand("Get images statistics")
+    @add_argument("--billing-project", required=False, help="Select project to show statistics")
+    @add_argument("--time-period", required=False, help="Set time period")
+    @add_argument("--period-start", required=False, help="Set time period start")
+    @add_argument("--period-end", required=False, help="Set time period end")
+    def images(self):
+        def url_escape(s):
+            return urllib.quote(s)
+
+        params = ["include=images-long"]
+        self.ask(params)
+
+    @subcommand("Get full statistics")
+    @add_argument("--billing-project", required=False, help="Select project to show statistics")
+    @add_argument("--time-period", required=False, help="Set time period")
+    @add_argument("--period-start", required=False, help="Set time period start")
+    @add_argument("--period-end", required=False, help="Set time period end")
+    def full(self):
         params = ["include=instances-long,images-long"]
+        self.ask(params)
+
+    def ask(self, params):
+        def url_escape(s):
+            return urllib.quote(s)
 
         if self.options.billing_project:
             req = "/%s" % url_escape(self.options.billing_project)
@@ -549,9 +574,12 @@ class BillingCommand(CliCommand):
         if params:
             req = "%s?%s" % (req, "&".join(params))
 
-        resp = self.get(req)
+        self.print_result(self.get(req))
+
+    def print_result(self, resp):
         print "Statistics for %s - %s" % (resp["period_start"], resp["period_end"])
-        for project in resp["projects"].values():
+        projects = (resp["project"],) if self.options.billing_project else resp["projects"].values()
+        for project in projects:
             print "Project %s" % (project["name"])
             for statistics_key in "instances", "images":
                 if statistics_key not in project:
