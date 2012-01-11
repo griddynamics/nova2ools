@@ -31,24 +31,23 @@ __all__.append("CliCommand")
 
 class CliCommand(object):
     __common_args = [
-        (("--debug",), {"default": False, "action": "store_true", "help": "Run in debug mode"}),
         (
             ("--version", "-v"),
             {
                 "action": "version",
                 "version": "Nova2ools Version: {0}".format(VERSION),
-                "help": "Show version"
-            }
+                "help": "Show version",
+            },
         )
     ]
     __common_defaults = {}
 
     @handle_command_error
-    def __init__(self, help, client_class=NovaApiClient):
+    def __init__(self, help, client_class=NovaApiClient, **kwargs):
         self.__help = help
-        self.__parser = self.__generate_options_parser(NovaApiClient)
+        self.__parser = self.__generate_options_parser(client_class)
         self.parse_args()
-        self.client = client_class(self.options)
+        self.client = client_class(self.options, **kwargs)
 
     def get(self, path=""):
         return self.client.get(getattr(self, "RESOURCE", "") + path)
