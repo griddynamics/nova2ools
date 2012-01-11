@@ -505,3 +505,66 @@ class ExtensionsCommand(CliCommand):
     def run(self):
         for ext in self.get()["extensions"]:
             sys.stdout.write("{name}({alias}): {description}\n".format(**ext))
+
+
+def format_usage(usage):
+    if "vcpus_h" in usage or "memory_mb_h" in usage:
+        return "%.4f GB*h\t%.4f MB*h\t%.4f CPU*h" % (
+                usage.get("local_gb_h", 0),
+                usage.get("memory_mb_h", 0),
+                usage.get("vcpus_h", 0),)
+    return "%.4f GB*h" % (usage.get("local_gb_h", 0))
+
+
+class BillingCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+    RESOURCE = "/projects"
+
+    def __init__(self):
+        super(BillingCommand, self).__init__("Manage billing subsystem", service_type="nova_billing")
+
+    @handle_command_error
+    def run(self):
+        self.options.subcommand()
+
+    @subcommand("Get statistics")
+    @add_argument("--billing-project", required=False, help="Select project to show statistics")
+    @add_argument("--time-period", required=False, help="Set time period")
+    @add_argument("--period-start", required=False, help="Set time period start")
+    @add_argument("--period-end", required=False, help="Set time period end")
+    def statistics(self):
+        def url_escape(s):
+            return s
+
+        params = ["include=instances-long,images-long"]
+
+        if self.options.billing_project:
+            req = "/%s" % url_escape(self.options.billing_project)
+        else:
+            req = ""
+
+        for opt in ["time_period", "period_start", "period_end"]:
+            if getattr(self.options, opt):
+                params.append("%s=%s" % (opt, url_escape(getattr(self.options, opt))))
+        if params:
+            req = "%s?%s" % (req, "&".join(params))
+
+        resp = self.get(req)
+        print "Statistics for %s - %s" % (resp["period_start"], resp["period_end"])
+        for project in resp["projects"].values():
+            print "Project %s" % (project["name"])
+            for statistics_key in "instances", "images":
+                if statistics_key not in project:
+                    continue
+                statistics_value = project[statistics_key]
+                print "%s: %s items" % (statistics_key, statistics_value["count"])
+                if "items" in statistics_value:
+                    for object_item in statistics_value["items"]:
+                        item_descr = "\t%s: %s\t%s - %s" % (
+                                object_item["id"],
+                                object_item["name"] or "",
+                                object_item["created_at"],
+                                object_item["destroyed_at"] or "now")
+                        print item_descr
+                        print "\t\t%s" % format_usage(object_item["usage"])
+                print "total:\t\t%s" % format_usage(statistics_value["usage"])
