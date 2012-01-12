@@ -193,10 +193,10 @@ class NovaApiClient(object):
         return self.request(self.__management_url + path, "GET", headers=self.__auth_headers)
 
     def post(self, path, body):
-        return self.request(self.__management_url + path, "POST", body, self.__auth_headers)
+        return self.request(self.__management_url + path, "POST", body=body, headers=self.__auth_headers)
 
     def put(self, path, body):
-        return self.request(self.__management_url + path, "PUT", body, self.__auth_headers)
+        return self.request(self.__management_url + path, "PUT", body=body, headers=self.__auth_headers)
 
     def delete(self, path):
         return self.request(self.__management_url + path, "DELETE", headers=self.__auth_headers)
