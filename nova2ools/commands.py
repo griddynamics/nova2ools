@@ -93,6 +93,12 @@ class CliCommand(object):
             sys.stderr.write("Warning: more then one({0}) server with `{1}` name\n".format(len(servers), name))
         return servers[0]
 
+    def get_server_by_id(self, id):
+        server = self.client.get("/servers/{0}".format(id))["server"]
+        if len(server) < 1:
+            raise CommandError(1, "VM `{0}` is not found".format(id))
+        return server
+
     def get_flavor_by_name(self, name):
         flavors = self.client.get("/flavors/detail")["flavors"]
         for flv in flavors:
@@ -107,6 +113,10 @@ class CliCommand(object):
         if len(images) > 1:
             sys.stderr.write("Warning: more then one({0}) image with `{1}` name\n".format(len(images), name))
         return images[0]
+
+    def get_image_by_id(self, id):
+        image = self.client.get("/images/{0}".format(id))["image"]
+        return image
 
     def get_security_group_by_name(self, name):
         sgroups = self.client.get("/os-security-groups")["security_groups"]
@@ -262,20 +272,26 @@ class VmsCommand(CliCommand):
         self.__flavors = {}
 
     @subcommand("Remove Virtual Machine")
-    @add_argument("vm", help="VM name")
+    @add_argument("vm", help="VM id or name")
     def remove(self):
-        srv = self.get_server_by_name(self.options.vm)
+        if not (self.options.vm.isdigit()):
+            srv = self.get_server_by_name(self.options.vm)
+        else:
+            srv = self.get_server_by_id(self.options.vm)
         self.delete("/{0}".format(srv["id"]))
 
     @subcommand("Show information about VM")
-    @add_argument("vm", help="VM name")
+    @add_argument("vm", help="VM id or name")
     def show(self):
-        srv = self.get_server_by_name(self.options.vm)
+        if not (self.options.vm.isdigit()):
+            srv = self.get_server_by_name(self.options.vm)
+        else:
+            srv = self.get_server_by_id(self.options.vm)
         self.__print_srv_details(srv)
 
     @subcommand("Spawn a new VM")
     @add_argument("-n", "--name", required=True, help="VM name")
-    @add_argument("-i", "--image", required=True, help="Image to use")
+    @add_argument("-i", "--image", required=True, help="Image to use (id or name)")
     @add_argument("-f", "--flavor", required=True, help="Flavor to use")
     @add_argument("-p", "--password", help="Administrator Password")
     @add_argument("-m", "--metadata", nargs="*", help="Server Metadata")
@@ -283,7 +299,10 @@ class VmsCommand(CliCommand):
     @add_argument("-j", "--inject", nargs="*", help="Inject file to image (personality)")
     @add_argument("-s", "--security-groups", nargs="*", help="Apply security groups to a new VM")
     def spawn(self):
-        img = self.get_image_by_name(self.options.image)
+        if not (self.options.image.isdigit()):
+            img = self.get_image_by_name(self.options.image)
+        else:
+            img = self.get_image_by_id(self.options.image)
         flv = self.get_flavor_by_name(self.options.flavor)
         srvDesc = {
             "name": self.options.name,
