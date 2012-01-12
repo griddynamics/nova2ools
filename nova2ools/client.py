@@ -59,11 +59,11 @@ class ServiceCatalog(object):
 
 class NovaApiClient(object):
     ARGUMENTS = [
-        (("--auth_url",), {"help": "Keystone or Nova URL for authentication"}),
+        (("--auth-url",), {"help": "Keystone or Nova URL for authentication"}),
         (("--username", "-u"), {"help": "OpenStack user name"}),
         (("--password", "-p"), {"help": "OpenStack API password"}),
-        (("--tenant_id",), {"help": "OpenStack Project(Tenant) ID"}),
-        (("--tenant_name", "--project", "-t"), {"help": "OpenStack Project(Tenant) name"}),
+        (("--tenant-id",), {"help": "OpenStack Project(Tenant) ID"}),
+        (("--tenant-name", "--project", "-t"), {"help": "OpenStack Project(Tenant) name"}),
         (("--token",), {"help": "OpenStack token"}),
         (("--endpoint",), {"help": "OpenStack endpoint"}),
         (("--debug",), {"action": "store_true", "help": "Run in debug mode"}),
