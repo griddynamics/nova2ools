@@ -362,7 +362,11 @@ class VmsCommand(CliCommand):
                 else:
                     prefix = "                 "
                 print "{prefix} {addr[addr]}(v{addr[version]}) net:{net_id} {type}".format(**locals())
-        print "           Image: {name}({metadata[architecture]})".format(**img)
+        print "           Image: ", img["name"],
+        try:
+            print "({metadata[architecture]})".format(**img)
+        except KeyError:
+            print ""
         print "          Flavor: {name} ram:{ram} vcpus:{vcpus} disk:{disk} swap:{swap}".format(**flv)
         if len(srv["metadata"]) > 0:
             first = True
