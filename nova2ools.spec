@@ -11,9 +11,9 @@ Group:            Development/Languages/Python
 
 Source0:          %{name}-%{version}.tar
 BuildRoot:        %{_tmppath}/%{name}-%{version}-build
-BuildRequires:    python-setuptools python-argparse python-httplib2
+BuildRequires:    python-setuptools python-argparse
 BuildArch:        noarch
-Requires:         python-argparse python-httplib2
+Requires:         python-argparse
 
 %description
 Set of command line utilities to work with OpenStack.

@@ -1,4 +1,4 @@
-import httplib2
+import httplib
 import json
 import sys
 import os
@@ -80,7 +80,6 @@ class NovaApiClient(object):
     }
 
     def __init__(self, options, service_type="compute"):
-        self.__client = httplib2.Http()
         self.options = options
         self.service_type = service_type
         self.service_catalog = ServiceCatalog({})
@@ -108,9 +107,7 @@ class NovaApiClient(object):
             "X-Auth-Key": self.options.password,
             "X-Auth-Project-Id": self.options.tenant_name
         }
-        self.__client.request(self.options.auth_url, "GET", headers=auth_headers)
-        resp = self.__client.getresponse()
-        self.__validate_response(resp)
+        resp = self.request(self.options.auth_url, "GET", headers=auth_headers)
         self.__token = resp.getheader("X-Auth-Token")
         if not self.__management_url:
             self.__management_url = resp.getheader("X-Server-Management-Url")
@@ -185,7 +182,11 @@ class NovaApiClient(object):
             kwargs['headers']['Content-Type'] = 'application/json'
             kwargs['body'] = json.dumps(kwargs['body'])
 
-        resp, body = self.__client.request(*args, **kwargs)
+        parsed = urlparse(args[0])
+        client = httplib.HTTPConnection(parsed.netloc)
+        client.request(args[1], parsed.path, **kwargs)
+        resp = client.getresponse()
+        body = resp.read()
         self.http_log(args, kwargs, resp, body)
         return self.__validate_response(resp, body)
 
