@@ -83,6 +83,7 @@ class NovaApiClient(object):
         self.options = options
         self.service_type = service_type
         self.service_catalog = ServiceCatalog({})
+        self.keystone_enabled = False
         self.auth()
 
     def auth(self):
@@ -148,10 +149,12 @@ class NovaApiClient(object):
             self.__auth_headers["X-Tenant"] = tenant_id
         if tenant_name:
             self.__auth_headers["X-Tenant-Name"] = tenant_name
+        self.keystone_enabled = True
 
-    def set_service_type(self, service_type):
+    def set_service_type(self, service_type, endpoint_type='publicURL'):
         try:
-            self.__management_url = self.service_catalog.url_for(service_type=service_type)
+            self.__management_url = self.service_catalog.url_for(
+                    service_type=service_type, endpoint_type=endpoint_type)
         except EndpointNotFound:
             raise CommandError(1, "Could not find `%s' in service catalog" % service_type)
         self.service_type = service_type
@@ -160,12 +163,7 @@ class NovaApiClient(object):
         if not self.options.debug:
             return
 
-        string_parts = ['curl -i']
-        for element in args:
-            if element in ('GET', 'POST'):
-                string_parts.append(' -X %s' % element)
-            else:
-                string_parts.append(' %s' % element)
+        string_parts = ["curl -i '%s' -X %s" % args]
 
         for element in kwargs['headers']:
             header = ' -H "%s: %s"' % (element, kwargs['headers'][element])
@@ -174,7 +172,8 @@ class NovaApiClient(object):
         print "REQ: %s\n" % "".join(string_parts)
         if 'body' in kwargs:
             print "REQ BODY: %s\n" % (kwargs['body'])
-        print "RESP: %s\nRESP BODY: %s\n" % (resp, body)
+        if resp:
+            print "RESP: %s\nRESP BODY: %s\n" % (resp.status, body)
 
     def request(self, *args, **kwargs):
         kwargs.setdefault('headers', kwargs.get('headers', {}))
@@ -182,12 +181,15 @@ class NovaApiClient(object):
             kwargs['headers']['Content-Type'] = 'application/json'
             kwargs['body'] = json.dumps(kwargs['body'])
 
-        parsed = urlparse(args[0])
-        client = httplib.HTTPConnection(parsed.netloc)
-        client.request(args[1], parsed.path, **kwargs)
-        resp = client.getresponse()
-        body = resp.read()
-        self.http_log(args, kwargs, resp, body)
+        resp, body = None, None
+        try:
+            parsed = urlparse(args[0])
+            client = httplib.HTTPConnection(parsed.netloc)
+            client.request(args[1], parsed.path, **kwargs)
+            resp = client.getresponse()
+            body = resp.read()
+        finally:
+            self.http_log(args, kwargs, resp, body)
         return self.__validate_response(resp, body)
 
     def get(self, path):

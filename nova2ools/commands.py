@@ -49,6 +49,7 @@ class CliCommand(object):
         self.__parser = self.__generate_options_parser(client_class)
         self.parse_args()
         self.client = client_class(self.options, **kwargs)
+        self.tenant_by_id = None
 
     def get(self, path=""):
         return self.client.get(getattr(self, "RESOURCE", "") + path)
@@ -124,6 +125,24 @@ class CliCommand(object):
             if sg["name"] == name:
                 return sg
         raise CommandError(1, "Security Group `{0}` is not found".format(name))
+
+    def get_tenant_name_by_id(self, tenant_id):
+        if not self.client.keystone_enabled:
+            return tenant_id
+        if self.tenant_by_id is None:
+            client = self.client
+            service_type = client.service_type
+            self.tenant_by_id = {}
+            try:
+                client.set_service_type("identity", "adminURL")
+                self.tenant_by_id = dict(
+                        [(tenant["id"], tenant["name"])
+                         for tenant in client.get("/tenants?limit=10000")
+                         ["tenants"]["values"]])
+            except CommandError:
+                pass
+            client.set_service_type(service_type)
+        return self.tenant_by_id.get(tenant_id, "#{0}".format(tenant_id))
 
 
 @export
@@ -347,7 +366,8 @@ class VmsCommand(CliCommand):
     def __print_srv_details(self, srv):
         img = self.get_image_detail(srv["image"]["id"])
         flv = self.get_flavor_detail(srv["flavor"]["id"])
-        print "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_id} key:{key_name} {status}".format(**srv)
+        print "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_name} key:{key_name} {status}".format(
+                    tenant_name=self.get_tenant_name_by_id(srv["tenant_id"]), **srv)
         if "adminPass" in srv:
             print "  Admin Password: {0}".format(srv["adminPass"])
         first = True
@@ -499,11 +519,11 @@ class SecGroupsCommand(CliCommand):
     def run(self):
         self.options.subcommand()
 
-    @classmethod
-    def __format(cls, sg):
+    def __format(self, sg):
         result = []
         put = result.append
-        put("{name}({tenant_id}): {description}\n".format(**sg))
+        put("{name}({tenant_name}): {description}\n".format(
+                tenant_name=self.get_tenant_name_by_id(sg["tenant_id"]), **sg))
         for rule in sg["rules"]:
             if len(rule["group"]) > 0:
                 fmt = "    {id}: GROUP({group[name]})\n"
