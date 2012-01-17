@@ -313,7 +313,7 @@ class VmsCommand(CliCommand):
             srv = self.get_server_by_name(self.options.vm)
         else:
             srv = self.get_server_by_id(self.options.vm)
-        self.__print_srv_details(srv)
+        self.__print_vm_detail(srv)
 
     @subcommand("Spawn a new VM")
     @add_argument("-n", "--name", required=True, help="VM name")
