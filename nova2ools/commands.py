@@ -134,7 +134,7 @@ class CliCommand(object):
             service_type = client.service_type
             self.tenant_by_id = {}
             try:
-                client.set_service_type("identity", "adminURL")
+                client.set_service_type("identity")
                 self.tenant_by_id = dict(
                         [(tenant["id"], tenant["name"])
                          for tenant in client.get("/tenants?limit=10000")
