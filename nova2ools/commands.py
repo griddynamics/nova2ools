@@ -136,9 +136,11 @@ class CliCommand(object):
             try:
                 client.set_service_type("identity")
                 self.tenant_by_id = dict(
-                        [(tenant["id"], tenant["name"])
-                         for tenant in client.get("/tenants?limit=10000")
-                         ["tenants"]["values"]])
+                    [
+                        (tenant["id"], tenant["name"])
+                        for tenant in client.get("/tenants?limit=10000")["tenants"]["values"]
+                    ]
+                )
             except CommandError:
                 pass
             client.set_service_type(service_type)
@@ -339,14 +341,18 @@ class VmsCommand(CliCommand):
         if self.options.security_groups is not None:
             srvDesc["security_groups"] = [{"name": i} for i in self.options.security_groups]
         srv = self.post("", {"server": srvDesc})["server"]
-        self.__print_srv_details(srv)
+        self.__print_vm_detail(srv)
 
     @subcommand("List spawned VMs")
+    @add_argument("-d", "--details", default=False, action="store_true", help="Print detailed information about VM")
     def list(self):
         response = self.get("/detail")
         servers = response["servers"]
         for srv in servers:
-            self.__print_srv_details(srv)
+            if self.options.details:
+                self.__print_vm_detail(srv)
+            else:
+                self.__print_vm_short(srv)
 
     @handle_command_error
     def run(self):
@@ -363,11 +369,35 @@ class VmsCommand(CliCommand):
             cache[id] = self.client.get("{0}/{1}".format(prefix, id))
         return cache[id]
 
-    def __print_srv_details(self, srv):
+    def __print_vm_short(self, vm):
+        tenant_name = self.get_tenant_name_by_id(vm["tenant_id"])
+        fixed_addresses = ",".join(
+            (
+            i["addr"]
+            for j in vm["addresses"].values()
+            for i in j
+            if i["fixed"]
+            )
+        )
+        sys.stdout.write(
+            "{name} 0x{id:x},{id} {user_id} {tenant_name} {status} {fixed_addresses}\n"
+            .format(
+                tenant_name=tenant_name,
+                fixed_addresses=fixed_addresses,
+                **vm
+            )
+        )
+
+    def __print_vm_detail(self, srv):
         img = self.get_image_detail(srv["image"]["id"])
         flv = self.get_flavor_detail(srv["flavor"]["id"])
-        print "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_name} key:{key_name} {status}".format(
-                    tenant_name=self.get_tenant_name_by_id(srv["tenant_id"]), **srv)
+        sys.stdout.write(
+            "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n"
+            .format(
+                tenant_name=self.get_tenant_name_by_id(srv["tenant_id"]),
+                **srv
+            )
+        )
         if "adminPass" in srv:
             print "  Admin Password: {0}".format(srv["adminPass"])
         first = True
@@ -486,7 +516,7 @@ class SecGroupsCommand(CliCommand):
     def allow_group(self):
         group = self.get_security_group_by_name(self.options.group)
         rule = {
-            "parent_group_id": group["id"],
+            "parent_group_id": group["id"]
         }
         allow_group = self.get_security_group_by_name(self.options.allow_group)
         rule["group_id"] = allow_group["id"]
@@ -521,9 +551,9 @@ class SecGroupsCommand(CliCommand):
 
     def __format(self, sg):
         result = []
+        tenant_name=self.get_tenant_name_by_id(sg["tenant_id"])
         put = result.append
-        put("{name}({tenant_name}): {description}\n".format(
-                tenant_name=self.get_tenant_name_by_id(sg["tenant_id"]), **sg))
+        put("{name}({tenant_name}): {description}\n".format(tenant_name=tenant_name, **sg))
         for rule in sg["rules"]:
             if len(rule["group"]) > 0:
                 fmt = "    {id}: GROUP({group[name]})\n"
@@ -588,43 +618,43 @@ class BillingCommand(CliCommand):
             return urllib.quote(s)
 
         if self.options.billing_project:
-            req = "/%s" % url_escape(self.options.billing_project)
+            req = "/{0}".format(url_escape(self.options.billing_project))
         else:
             req = ""
 
         for opt in ["time_period", "period_start", "period_end"]:
             if getattr(self.options, opt):
-                params.append("%s=%s" % (opt, url_escape(getattr(self.options, opt))))
+                params.append("{0}={1}".format(opt, url_escape(getattr(self.options, opt))))
         if params:
-            req = "%s?%s" % (req, "&".join(params))
-
+            req = "{0}?{1}".format(req, "&".join(params))
         self.print_result(self.get(req))
 
     @staticmethod
     def format_usage(usage):
         if "vcpus_h" in usage or "memory_mb_h" in usage:
-            return "%.4f GB*h\t%.4f MB*h\t%.4f CPU*h" % (
-                    usage.get("local_gb_h", 0),
-                    usage.get("memory_mb_h", 0),
-                    usage.get("vcpus_h", 0),)
-        return "%.4f GB*h" % (usage.get("local_gb_h", 0))
+            return "{0:.4f} GB*h\t{1:.4f} MB*h\t{2:.4f} CPU*h".format(
+                usage.get("local_gb_h", 0),
+                usage.get("memory_mb_h", 0),
+                usage.get("vcpus_h", 0)
+            )
+        return "{0:.4f} GB*h".format(usage.get("local_gb_h", 0))
 
     def print_result(self, resp):
-        print "Statistics for %s - %s" % (resp["period_start"], resp["period_end"])
+        print "Statistics for {0} - {1}".format(resp["period_start"], resp["period_end"])
         for project in resp["projects"]:
-            print "Project %s" % (self.get_tenant_name_by_id(project["id"]))
+            print "Project {0}".format(self.get_tenant_name_by_id(project["id"]))
             for statistics_key in "instances", "images":
                 if statistics_key not in project:
                     continue
                 statistics_value = project[statistics_key]
-                print "%s: %s items" % (statistics_key, statistics_value["count"])
+                print "{0}: {1} items".format(statistics_key, statistics_value["count"])
                 if "items" in statistics_value:
                     for object_item in statistics_value["items"]:
-                        item_descr = "\t%s: %s\t%s - %s" % (
-                                object_item["id"],
-                                object_item["name"] or "",
-                                object_item["created_at"],
-                                object_item["destroyed_at"] or "now")
+                        item_descr = "\t{0}: {1}\t{2} - {3}".format(
+                            object_item["id"],
+                            object_item["name"] or "",
+                            object_item["created_at"],
+                            object_item["destroyed_at"] or "now")
                         print item_descr
-                        print "\t\t%s" % self.format_usage(object_item["usage"])
-                print "total:\t\t%s" % self.format_usage(statistics_value["usage"])
+                        print "\t\t{0}".format(self.format_usage(object_item["usage"]))
+                print "total:\t\t{0}".format(self.format_usage(statistics_value["usage"]))
