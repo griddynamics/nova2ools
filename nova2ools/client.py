@@ -18,33 +18,44 @@ class EndpointNotFound(Exception):
     pass
 
 
-class ServiceCatalog(object):
-    """Helper methods for dealing with a Keystone Service Catalog."""
+class TokenInfo(object):
+    """Helper methods for dealing with a Keystone Token Info."""
 
     def __init__(self, resource_dict):
-        self.catalog = resource_dict
+        self.token_info = resource_dict
+        self.roles = None
 
     def get_token(self):
-        return self.catalog['access']['token']['id']
+        return self.token_info['access']['token']['id']
+
+    def get_roles(self):
+        if self.roles is None:
+            try:
+                self.roles = set([role_ref["name"]
+                    for role_ref in
+                        self.token_info["access"]["user"]["roles"]])
+            except KeyError:
+                self.roles = set()
+        return self.roles
 
     def url_for(self, attr=None, filter_value=None,
                     service_type='compute', endpoint_type='publicURL'):
         """Fetch the public URL from the Compute service for
         a particular endpoint attribute. If none given, return
         the first. See tests for sample service catalog."""
-        if 'endpoints' in self.catalog:
+        if 'endpoints' in self.token_info:
             # We have a bastardized service catalog. Treat it special. :/
-            for endpoint in self.catalog['endpoints']:
+            for endpoint in self.token_info['endpoints']:
                 if not filter_value or endpoint[attr] == filter_value:
                     return endpoint[endpoint_type]
             raise EndpointNotFound()
 
         # We don't always get a service catalog back ...
-        if not 'serviceCatalog' in self.catalog['access']:
+        if not 'serviceCatalog' in self.token_info['access']:
             raise EndpointNotFound()
 
         # Full catalog ...
-        catalog = self.catalog['access']['serviceCatalog']
+        catalog = self.token_info['access']['serviceCatalog']
 
         for service in catalog:
             if service['type'] != service_type:
@@ -56,6 +67,7 @@ class ServiceCatalog(object):
                     return endpoint[endpoint_type]
 
         raise EndpointNotFound()
+
 
 class NovaApiClient(object):
     ARGUMENTS = [
@@ -82,8 +94,7 @@ class NovaApiClient(object):
     def __init__(self, options, service_type="compute"):
         self.options = options
         self.service_type = service_type
-        self.service_catalog = ServiceCatalog({})
-        self.keystone_enabled = False
+        self.token_info = None
         self.auth()
 
     def auth(self):
@@ -108,7 +119,7 @@ class NovaApiClient(object):
             "X-Auth-Key": self.options.password,
             "X-Auth-Project-Id": self.options.tenant_name
         }
-        resp = self.request(self.options.auth_url, "GET", headers=auth_headers)
+        resp, body = self.request(self.options.auth_url, "GET", headers=auth_headers)
         self.__token = resp.getheader("X-Auth-Token")
         if not self.__management_url:
             self.__management_url = resp.getheader("X-Server-Management-Url")
@@ -134,26 +145,25 @@ class NovaApiClient(object):
             params['auth']['tenantId'] = tenant_id
         elif tenant_name:
             params['auth']['tenantName'] = tenant_name
-        access = self.request(
+        resp, access = self.request(
                 self.options.auth_url + "/tokens",
                 "POST",
                 body=params,
                 headers={"Content-Type": "application/json"})
-        self.service_catalog = ServiceCatalog(access)
+        self.token_info = TokenInfo(access)
         if not self.__management_url and self.service_type:
             self.set_service_type(self.service_type)
         self.__auth_headers = {
-            "X-Auth-Token": self.service_catalog.get_token()
+            "X-Auth-Token": self.token_info.get_token()
         }
         if tenant_id:
             self.__auth_headers["X-Tenant"] = tenant_id
         if tenant_name:
             self.__auth_headers["X-Tenant-Name"] = tenant_name
-        self.keystone_enabled = True
 
     def set_service_type(self, service_type, endpoint_type='publicURL'):
         try:
-            self.__management_url = self.service_catalog.url_for(
+            self.__management_url = self.token_info.url_for(
                     service_type=service_type, endpoint_type=endpoint_type)
         except EndpointNotFound:
             raise CommandError(1, "Could not find `%s' in service catalog" % service_type)
@@ -193,19 +203,19 @@ class NovaApiClient(object):
             body = resp.read()
         finally:
             self.http_log(args, kwargs, resp, body)
-        return self.__validate_response(resp, body)
+        return (resp, self.__validate_response(resp, body))
 
     def get(self, path):
-        return self.request(self.__management_url + path, "GET", headers=self.__auth_headers)
+        return self.request(self.__management_url + path, "GET", headers=self.__auth_headers)[1]
 
     def post(self, path, body):
-        return self.request(self.__management_url + path, "POST", body=body, headers=self.__auth_headers)
+        return self.request(self.__management_url + path, "POST", body=body, headers=self.__auth_headers)[1]
 
     def put(self, path, body):
-        return self.request(self.__management_url + path, "PUT", body=body, headers=self.__auth_headers)
+        return self.request(self.__management_url + path, "PUT", body=body, headers=self.__auth_headers)[1]
 
     def delete(self, path):
-        return self.request(self.__management_url + path, "DELETE", headers=self.__auth_headers)
+        return self.request(self.__management_url + path, "DELETE", headers=self.__auth_headers)[1]
 
     def __validate_response(self, response, response_content):
         if response.status == 200:

@@ -127,14 +127,19 @@ class CliCommand(object):
         raise CommandError(1, "Security Group `{0}` is not found".format(name))
 
     def get_tenant_name_by_id(self, tenant_id):
-        if not self.client.keystone_enabled:
+        if not self.client.token_info:
             return tenant_id
         if self.tenant_by_id is None:
             client = self.client
             service_type = client.service_type
             self.tenant_by_id = {}
             try:
-                client.set_service_type("identity")
+                client.set_service_type(
+                        "identity",
+                        "adminURL"
+                        if "Admin" in
+                        client.token_info.get_roles()
+                        else "publicURL")
                 self.tenant_by_id = dict(
                     [
                         (tenant["id"], tenant["name"])
