@@ -185,7 +185,10 @@ class NovaApiClient(object):
         try:
             parsed = urlparse(args[0])
             client = httplib.HTTPConnection(parsed.netloc)
-            client.request(args[1], parsed.path, **kwargs)
+            request_uri = ("?".join([parsed.path, parsed.query])
+                           if parsed.query
+                           else parsed.path)
+            client.request(args[1], request_uri, **kwargs)
             resp = client.getresponse()
             body = resp.read()
         finally:
