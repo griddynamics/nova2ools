@@ -108,7 +108,7 @@ class NovaApiClient(object):
             "X-Auth-Key": self.options.password,
             "X-Auth-Project-Id": self.options.tenant_name
         }
-        resp = self.request(self.options.auth_url, "GET", headers=auth_headers)
+        resp, body = self.request(self.options.auth_url, "GET", headers=auth_headers)
         self.__token = resp.getheader("X-Auth-Token")
         if not self.__management_url:
             self.__management_url = resp.getheader("X-Server-Management-Url")
@@ -134,7 +134,7 @@ class NovaApiClient(object):
             params['auth']['tenantId'] = tenant_id
         elif tenant_name:
             params['auth']['tenantName'] = tenant_name
-        access = self.request(
+        resp, access = self.request(
                 self.options.auth_url + "/tokens",
                 "POST",
                 body=params,
@@ -184,6 +184,7 @@ class NovaApiClient(object):
         resp, body = None, None
         try:
             parsed = urlparse(args[0])
+            print parsed
             client = httplib.HTTPConnection(parsed.netloc)
             request_uri = ("?".join([parsed.path, parsed.query])
                            if parsed.query
@@ -193,19 +194,19 @@ class NovaApiClient(object):
             body = resp.read()
         finally:
             self.http_log(args, kwargs, resp, body)
-        return self.__validate_response(resp, body)
+        return (resp, self.__validate_response(resp, body))
 
     def get(self, path):
-        return self.request(self.__management_url + path, "GET", headers=self.__auth_headers)
+        return self.request(self.__management_url + path, "GET", headers=self.__auth_headers)[1]
 
     def post(self, path, body):
-        return self.request(self.__management_url + path, "POST", body=body, headers=self.__auth_headers)
+        return self.request(self.__management_url + path, "POST", body=body, headers=self.__auth_headers)[1]
 
     def put(self, path, body):
-        return self.request(self.__management_url + path, "PUT", body=body, headers=self.__auth_headers)
+        return self.request(self.__management_url + path, "PUT", body=body, headers=self.__auth_headers)[1]
 
     def delete(self, path):
-        return self.request(self.__management_url + path, "DELETE", headers=self.__auth_headers)
+        return self.request(self.__management_url + path, "DELETE", headers=self.__auth_headers)[1]
 
     def __validate_response(self, response, response_content):
         if response.status == 200:
