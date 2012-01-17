@@ -551,15 +551,6 @@ class ExtensionsCommand(CliCommand):
             sys.stdout.write("{name}({alias}): {description}\n".format(**ext))
 
 
-def format_usage(usage):
-    if "vcpus_h" in usage or "memory_mb_h" in usage:
-        return "%.4f GB*h\t%.4f MB*h\t%.4f CPU*h" % (
-                usage.get("local_gb_h", 0),
-                usage.get("memory_mb_h", 0),
-                usage.get("vcpus_h", 0),)
-    return "%.4f GB*h" % (usage.get("local_gb_h", 0))
-
-
 class BillingCommand(CliCommand):
     __metaclass__ = CliCommandMetaclass
     RESOURCE = "/projects"
@@ -609,6 +600,15 @@ class BillingCommand(CliCommand):
 
         self.print_result(self.get(req))
 
+    @staticmethod
+    def format_usage(usage):
+        if "vcpus_h" in usage or "memory_mb_h" in usage:
+            return "%.4f GB*h\t%.4f MB*h\t%.4f CPU*h" % (
+                    usage.get("local_gb_h", 0),
+                    usage.get("memory_mb_h", 0),
+                    usage.get("vcpus_h", 0),)
+        return "%.4f GB*h" % (usage.get("local_gb_h", 0))
+
     def print_result(self, resp):
         print "Statistics for %s - %s" % (resp["period_start"], resp["period_end"])
         for project in resp["projects"]:
@@ -626,5 +626,5 @@ class BillingCommand(CliCommand):
                                 object_item["created_at"],
                                 object_item["destroyed_at"] or "now")
                         print item_descr
-                        print "\t\t%s" % format_usage(object_item["usage"])
-                print "total:\t\t%s" % format_usage(statistics_value["usage"])
+                        print "\t\t%s" % self.format_usage(object_item["usage"])
+                print "total:\t\t%s" % self.format_usage(statistics_value["usage"])
