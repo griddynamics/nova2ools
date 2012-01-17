@@ -587,7 +587,8 @@ class BillingCommand(CliCommand):
         if self.options.images:
             include.append("images")
         if self.options.long:
-            include = [opt + "-long" for opt in include]
+            include = ([opt + "-long" for opt in include]
+                       if include else ["instances-long"])
         params = ["include=" + ",".join(include)] if include else []
         self.ask(params)
 
@@ -610,9 +611,8 @@ class BillingCommand(CliCommand):
 
     def print_result(self, resp):
         print "Statistics for %s - %s" % (resp["period_start"], resp["period_end"])
-        projects = (resp["project"],) if self.options.billing_project else resp["projects"].values()
-        for project in projects:
-            print "Project %s" % (project["name"])
+        for project in resp["projects"]:
+            print "Project %s" % (self.get_tenant_name_by_id(project["id"]))
             for statistics_key in "instances", "images":
                 if statistics_key not in project:
                     continue
