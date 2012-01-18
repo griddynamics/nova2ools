@@ -349,6 +349,14 @@ class VmsCommand(CliCommand):
         self.__print_vm_detail(srv)
 
     @subcommand("List spawned VMs")
+    @add_argument(
+        "-f", "--format",
+        default="{name:20} 0x{id:08x},{id:<5} {user_id:15} {tenant_name:10} {status:10} {fixed_addresses}",
+        help="Set output format. The format syntax is the same as for Python `str.format` method. " +
+        "Available variables: `id`, `name`, `created`, `updated`, `user_id`, `status`, `tenant_id`, `tenant_name`, " +
+        "`fixed_addresses`, `float_addresses`, `image_id`. Default format: " +
+        "\"{name:20} 0x{id:08x},{id:<5} {user_id:15} {tenant_name:10} {status:10} {fixed_addresses}\""
+    )
     @add_argument("-d", "--details", default=False, action="store_true", help="Print detailed information about VM")
     def list(self):
         response = self.get("/detail")
@@ -357,7 +365,7 @@ class VmsCommand(CliCommand):
             if self.options.details:
                 self.__print_vm_detail(srv)
             else:
-                self.__print_vm_short(srv)
+                self.__print_vm_format(self.options.format, srv)
 
     @handle_command_error
     def run(self):
@@ -374,7 +382,14 @@ class VmsCommand(CliCommand):
             cache[id] = self.client.get("{0}/{1}".format(prefix, id))
         return cache[id]
 
-    def __print_vm_short(self, vm):
+    def __print_vm_format(self, format, vm):
+        id = vm["id"]
+        name = vm["name"]
+        created = vm["created"]
+        updated = vm["updated"]
+        user_id = vm["user_id"]
+        status = vm["status"]
+        tenant_id = vm["tenant_id"]
         tenant_name = self.get_tenant_name_by_id(vm["tenant_id"])
         fixed_addresses = ",".join(
             (
@@ -384,14 +399,21 @@ class VmsCommand(CliCommand):
             if i["fixed"]
             )
         )
-        sys.stdout.write(
-            "{name} 0x{id:x},{id} {user_id} {tenant_name} {status} {fixed_addresses}\n"
-            .format(
-                tenant_name=tenant_name,
-                fixed_addresses=fixed_addresses,
-                **vm
+        float_addresses = ",".join(
+            (
+            i["addr"]
+            for j in vm["addresses"].values()
+            for i in j
+            if not i["fixed"]
             )
         )
+        image_id = vm["image"]["id"]
+        info = dict(locals())
+        del info["self"]
+        del info["vm"]
+        del info["format"]
+        sys.stdout.write(format.format(**info))
+        sys.stdout.write("\n")
 
     def __print_vm_detail(self, srv):
         img = self.get_image_detail(srv["image"]["id"])
