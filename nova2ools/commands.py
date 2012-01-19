@@ -91,7 +91,8 @@ class CliCommand(object):
         if len(servers) < 1:
             raise CommandError(1, "VM `{0}` is not found".format(name))
         if len(servers) > 1:
-            sys.stderr.write("Warning: more then one({0}) server with `{1}` name\n".format(len(servers), name))
+            msg = "More then one({0}) server with `{1}` name (use `id` instead of name)".format(len(servers), name)
+            raise CommandError(q, msg)
         return servers[0]
 
     def get_server_by_id(self, id):
@@ -112,7 +113,8 @@ class CliCommand(object):
         if len(images) < 1:
             raise CommandError(1, "Image `{0}` is not found".format(name))
         if len(images) > 1:
-            sys.stderr.write("Warning: more then one({0}) image with `{1}` name\n".format(len(images), name))
+            msg = "More then one({0}) image with `{1}` name (use `id` instead of name)".format(len(images), name)
+            raise CommandError(1, msg)
         return images[0]
 
     def get_image_by_id(self, id):
@@ -209,7 +211,8 @@ class ImagesCommand(CliCommand):
     def list(self):
         images = self.get("/detail")
         for img in ifilter(self.__filter_images, images["images"]):
-            sys.stdout.write("{id}: {name}\n".format(**img))
+            print img
+            sys.stdout.write("{id} {name}\n".format(**img))
             if self.options.metadata and len(img["metadata"]) > 0:
                 first = True
                 for key, value in img["metadata"].items():
@@ -302,9 +305,9 @@ class VmsCommand(CliCommand):
     def remove(self):
         if not (self.options.vm.isdigit()):
             srv = self.get_server_by_name(self.options.vm)
+            self.delete("/{0}".format(srv["id"]))
         else:
-            srv = self.get_server_by_id(self.options.vm)
-        self.delete("/{0}".format(srv["id"]))
+            self.delete("/{0}".format(self.options.vm))
 
     @subcommand("Show information about VM")
     @add_argument("vm", help="VM id or name")
