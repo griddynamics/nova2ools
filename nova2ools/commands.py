@@ -11,6 +11,7 @@ from client import NovaApiClient
 from exceptions import CommandError
 from exceptions import handle_command_error
 from nova2ools import VERSION
+from nova2ools.utils import generate_password
 
 
 __all__ = []
@@ -350,7 +351,7 @@ class VmsCommand(CliCommand):
     @add_argument("-n", "--name", required=True, help="VM name")
     @add_argument("-i", "--image", required=True, help="Image to use (id or name)")
     @add_argument("-f", "--flavor", required=True, help="Flavor to use")
-    @add_argument("-p", "--password", help="Administrator Password")
+    @add_argument("-p", "--admin-password", help="Administrator Password")
     @add_argument("-m", "--metadata", nargs="*", help="Server Metadata")
     @add_argument("-k", "--keyname", help="Registered SSH Key Name")
     @add_argument("-j", "--inject", nargs="*", help="Inject file to image (personality)")
@@ -364,10 +365,10 @@ class VmsCommand(CliCommand):
         srvDesc = {
             "name": self.options.name,
             "imageRef": img["links"][0]["href"],
-            "flavorRef": flv["id"]
+            "flavorRef": flv["id"],
+            "adminPass": self.options.admin_password or generate_password(16)
         }
-        if self.options.password is not None:
-            srvDesc["adminPass"] = self.options.password
+
         if self.options.metadata is not None:
             srvDesc["metadata"] = self.__generate_metadata_dict(self.options.metadata)
         if self.options.keyname is not None:
