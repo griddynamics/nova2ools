@@ -93,7 +93,7 @@ class CliCommand(object):
             raise CommandError(1, "VM `{0}` is not found".format(name))
         if len(servers) > 1:
             msg = "More then one({0}) server with `{1}` name (use `id` instead of name)".format(len(servers), name)
-            raise CommandError(q, msg)
+            raise CommandError(1, msg)
         return servers[0]
 
     def get_server_by_id(self, id):
