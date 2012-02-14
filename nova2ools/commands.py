@@ -207,19 +207,27 @@ class ImagesCommand(CliCommand):
         super(ImagesCommand, self).__init__("List images available for the project")
 
     @subcommand("List available images")
+    @add_argument(
+        "-f", "--format",
+        default="{name:20} 0x{id:08x},{id:<5} {status:10}",
+        help="Set output format. The format syntax is the same as for Python `str.format` method. " +
+             "Available variables: `id`, `name`, `created`, `updated`, `status`, `progress`, `metadata`. Default format: " +
+             "\"{name:20} 0x{id:08x},{id:<5} {status:10}\""
+    )
     @add_argument("-m", "--metadata", action="store_true", default=False, help="Include metadata information to output")
     def list(self):
         images = self.get("/detail")
+        format = self.options.format
         for img in ifilter(self.__filter_images, images["images"]):
-            print img
-            sys.stdout.write("{id} {name}\n".format(**img))
+            self.__print_image_format(format, img)
             if self.options.metadata and len(img["metadata"]) > 0:
                 first = True
                 for key, value in img["metadata"].items():
                     if first:
-                        sys.stdout.write("Metadata: {0} -> {1}\n".format(key, value))
+                        sys.stdout.write("Metadata: {0:5} -> {1}\n".format(key, value))
                         first = False
-                    sys.stdout.write("          {0} -> {1}\n".format(key, value))
+                    else:
+                        sys.stdout.write("          {0:14} -> {1}\n".format(key, value))
 
     @handle_command_error
     def run(self):
@@ -231,6 +239,26 @@ class ImagesCommand(CliCommand):
             img["name"] is not None
             and img["status"] == "ACTIVE"
             )
+
+    def __print_image_format(self, format, image):
+        id = int(image["id"])
+        name = image["name"]
+        created = image["created"]
+        updated = image["updated"]
+        status = image["status"]
+        progress = image["progress"]
+        metadata = ", ".join(
+            (
+                "{0}={1}".format(k, v)
+                for k, v in image["metadata"].items()
+            )
+        )
+        info = dict(locals())
+        del info["self"]
+        del info["image"]
+        del info["format"]
+        sys.stdout.write(format.format(**info))
+        sys.stdout.write("\n")
 
 
 class SshKeysCommand(CliCommand):
