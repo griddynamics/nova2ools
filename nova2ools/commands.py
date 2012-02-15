@@ -6,6 +6,7 @@ import urllib
 from argparse import ArgumentParser
 from inspect import ismethod
 from itertools import ifilter
+import re
 
 from client import NovaApiClient
 from exceptions import CommandError
@@ -717,3 +718,133 @@ class BillingCommand(CliCommand):
                         print item_descr
                         print "\t\t{0}".format(self.format_usage(object_item["usage"]))
                 print "total:\t\t{0}".format(self.format_usage(statistics_value["usage"]))
+
+
+class FloatingIpCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+
+    def __init__(self):
+        super(FloatingIpCommand, self).__init__("Working with floating ips")
+
+    @handle_command_error
+    def run(self):
+        self.options.subcommand()
+
+    @handle_command_error
+    @subcommand("Get floating ips")
+    @add_argument(
+        "-f", "--format",
+        default="{id} {ip:20} {fixed_ip} {instance_id:<10}",
+        help="Set output format. The format syntax is the same as for Python `str.format` method. " +
+             "Available variables: `ip`, `instance_id`, `fixed_ip`, `id`. Default format: " +
+             "\"{id} {ip:20} {fixed_ip} {instance_id:<10}\""
+    )
+    def list(self):
+        """List floating ips for this tenant."""
+        res = self.get("/os-floating-ips")
+        ips = res.get('floating_ips')
+        if not ips:
+            sys.stdout.write("There are no floating ips available")
+        for ip in ips:
+            self.__print_floating_ip(self.options.format, ip)
+
+    @handle_command_error
+    @subcommand("Allocate floating ip")
+    @add_argument(
+        "-f", "--format",
+        default="Id: {id}\nIp: {ip:20}",
+        help="Set output format. The format syntax is the same as for Python `str.format` method. " +
+             "Available variables: `ip`, `instance_id`, `fixed_ip`, `id`. Default format: " +
+             "\"{id} {ip:20}\""
+    )
+    def allocate(self):
+        """Allocate a floating IP for the current tenant."""
+        try:
+            res = self.post("/os-floating-ips", body=None)
+        except Exception:
+            raise CommandError(1, 'No more floating ips available')
+        floating_ip = res.get('floating_ip')
+        self.__print_floating_ip(self.options.format, floating_ip)
+
+    @handle_command_error
+    @subcommand("De-allocate floating ip")
+    @add_argument('ip', metavar='<ip>', help='IP of Floating Ip.')
+    def deallocate(self):
+        """De-allocate a floating IP."""
+        floating_ip = self.get_floating_ip(self.options.ip)
+        return self.delete("/os-floating-ips/%s" % floating_ip['id'])
+
+    @handle_command_error
+    @subcommand("Attach floating ip to server")
+    @add_argument("vm", help="VM id or name")
+    @add_argument('ip', help='IP Address.')
+    def attach(self):
+        """Attach a floating IP address to a server."""
+        if not (self.options.vm.isdigit()):
+            srv = self.get_server_by_name(self.options.vm)
+        else:
+            srv = self.get_server_by_id(self.options.vm)
+        floating_ip = self.get_floating_ip(self.options.ip)
+
+        srv_id = srv['id']
+        ip = floating_ip['ip']
+
+        url = '/servers/%s/action' % srv_id
+        return self.post(url, {'addFloatingIp': {'address': ip}})
+
+    @handle_command_error
+    @subcommand("Detach floating ip from server")
+    @add_argument("vm", help="VM id or name")
+    @add_argument('ip', help='IP Address.')
+    def detach(self):
+        """Detach a floating IP address from a server."""
+        if not (self.options.vm.isdigit()):
+            srv = self.get_server_by_name(self.options.vm)
+        else:
+            srv = self.get_server_by_id(self.options.vm)
+        floating_ip = self.get_floating_ip(self.options.ip)
+
+        srv_id = srv['id']
+        ip = floating_ip['ip']
+
+        url = '/servers/%s/action' % srv_id
+        return self.post(url, {'removeFloatingIp': {'address': ip}})
+
+    def get_floating_ip(self, identifier):
+        if identifier.isdigit():
+            return self.get_floating_ip_by_id(identifier)
+        else:
+            return self.get_floating_ip_by_ip(identifier)
+
+    def get_floating_ip_by_ip(self, ip):
+        res = self.get("/os-floating-ips")
+        floating_ips = res.get('floating_ips')
+        if not floating_ips:
+            raise CommandError(1, "There are no floating ips available")
+        for floating_ip in floating_ips:
+            if floating_ip['ip'] == ip:
+                return floating_ip
+        raise CommandError(1, "Floating ip %s not found" % ip)
+
+    def get_floating_ip_by_id(self, id):
+        id = int(id)
+        res = self.get("/os-floating-ips")
+        floating_ips = res.get('floating_ips')
+        if not floating_ips:
+            raise CommandError(1, "There are no floating ips available")
+        for floating_ip in floating_ips:
+            if floating_ip['id'] == id:
+                return floating_ip
+        raise CommandError(1, "Floating ip with id %s not found" % id)
+
+    def __print_floating_ip(self, format, floating_ip):
+        id = floating_ip["id"]
+        instance_id = floating_ip["instance_id"]
+        fixed_ip = floating_ip["fixed_ip"]
+        ip = floating_ip["ip"]
+        info = dict(locals())
+        del info["self"]
+        del info["floating_ip"]
+        del info["format"]
+        sys.stdout.write(format.format(**info))
+        sys.stdout.write("\n")
