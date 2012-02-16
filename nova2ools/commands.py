@@ -56,8 +56,11 @@ class CliCommand(object):
     def get(self, path=""):
         return self.client.get(getattr(self, "RESOURCE", "") + path)
 
-    def post(self, path, body):
+    def post(self, path, body=None):
         return self.client.post(getattr(self, "RESOURCE", "") + path, body)
+
+    def action(self, path):
+        return self.client.action(getattr(self, "RESOURCE", "") + path)
 
     def put(self, path, body):
         return self.client.put(getattr(self, "RESOURCE", "") + path, body)
@@ -399,6 +402,16 @@ class VmsCommand(CliCommand):
                 self.__print_vm_detail(srv)
             else:
                 self.__print_vm_format(self.options.format, srv)
+
+    @subcommand("Migrate VM")
+    @add_argument("vm", help="VM id or name")
+    def migrate(self):
+        if not (self.options.vm.isdigit()):
+            srv = self.get_server_by_name(self.options.vm)
+        else:
+            srv = self.get_server_by_id(self.options.vm)
+        url ="/%s/migrate" % srv['id']
+        return self.post(url)
 
     @handle_command_error
     def run(self):

@@ -187,7 +187,7 @@ class NovaApiClient(object):
 
     def request(self, *args, **kwargs):
         kwargs.setdefault('headers', kwargs.get('headers', {}))
-        if 'body' in kwargs:
+        if 'body' in kwargs and kwargs['body'] is not None:
             kwargs['headers']['Content-Type'] = 'application/json'
             kwargs['body'] = json.dumps(kwargs['body'])
 
@@ -210,6 +210,9 @@ class NovaApiClient(object):
 
     def post(self, path, body):
         return self.request(self.__management_url + path, "POST", body=body, headers=self.__auth_headers)[1]
+
+    def action(self, path):
+        return self.request(self.__management_url + path, "POST", headers=self.__auth_headers)[1]
 
     def put(self, path, body):
         return self.request(self.__management_url + path, "PUT", body=body, headers=self.__auth_headers)[1]
