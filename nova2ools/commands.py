@@ -91,6 +91,11 @@ class CliCommand(object):
             subparser.set_defaults(subcommand=attr)
         return parser
 
+    def get_server(self, identifier):
+        if not identifier.isdigit():
+            return self.get_server_by_name(identifier)
+        return self.get_server_by_id(identifier)
+
     def get_server_by_name(self, name):
         servers = self.client.get("/servers/detail?name={0}".format(name))["servers"]
         if len(servers) < 1:
@@ -112,6 +117,11 @@ class CliCommand(object):
             if flv["name"] == name:
                 return flv
         raise CommandError(1, "Flavor `{0}` is not found".format(name))
+
+    def get_image(self, identifier):
+        if not identifier.isdigit():
+            return self.get_image_by_name(identifier)
+        return self.get_image_by_id(identifier)
 
     def get_image_by_name(self, name):
         images = self.client.get("/images/detail?name={0}".format(name))["images"]
@@ -336,19 +346,13 @@ class VmsCommand(CliCommand):
     @subcommand("Remove Virtual Machine")
     @add_argument("vm", help="VM id or name")
     def remove(self):
-        if not (self.options.vm.isdigit()):
-            srv = self.get_server_by_name(self.options.vm)
-            self.delete("/{0}".format(srv["id"]))
-        else:
-            self.delete("/{0}".format(self.options.vm))
+        srv = self.get_server(self.options.vm)
+        self.delete("/{0}".format(srv["id"]))
 
     @subcommand("Show information about VM")
     @add_argument("vm", help="VM id or name")
     def show(self):
-        if not (self.options.vm.isdigit()):
-            srv = self.get_server_by_name(self.options.vm)
-        else:
-            srv = self.get_server_by_id(self.options.vm)
+        srv = self.get_server(self.options.vm)
         self.__print_vm_detail(srv)
 
     @subcommand("Spawn a new VM")
@@ -361,10 +365,7 @@ class VmsCommand(CliCommand):
     @add_argument("-j", "--inject", nargs="*", help="Inject file to image (personality)")
     @add_argument("-s", "--security-groups", nargs="*", help="Apply security groups to a new VM")
     def spawn(self):
-        if not (self.options.image.isdigit()):
-            img = self.get_image_by_name(self.options.image)
-        else:
-            img = self.get_image_by_id(self.options.image)
+        img = self.get_image(self.options.image)
         flv = self.get_flavor_by_name(self.options.flavor)
         srvDesc = {
             "name": self.options.name,
@@ -406,10 +407,7 @@ class VmsCommand(CliCommand):
     @subcommand("Migrate VM")
     @add_argument("vm", help="VM id or name")
     def migrate(self):
-        if not (self.options.vm.isdigit()):
-            srv = self.get_server_by_name(self.options.vm)
-        else:
-            srv = self.get_server_by_id(self.options.vm)
+        srv = self.get_server(self.options.vm)
         url ="/%s/migrate" % srv['id']
         return self.post(url)
 
@@ -793,10 +791,7 @@ class FloatingIpCommand(CliCommand):
     @add_argument('ip', help='IP Address.')
     def attach(self):
         """Attach a floating IP address to a server."""
-        if not (self.options.vm.isdigit()):
-            srv = self.get_server_by_name(self.options.vm)
-        else:
-            srv = self.get_server_by_id(self.options.vm)
+        srv = self.get_server(self.options.vm)
         floating_ip = self.get_floating_ip(self.options.ip)
 
         srv_id = srv['id']
@@ -811,10 +806,7 @@ class FloatingIpCommand(CliCommand):
     @add_argument('ip', help='IP Address.')
     def detach(self):
         """Detach a floating IP address from a server."""
-        if not (self.options.vm.isdigit()):
-            srv = self.get_server_by_name(self.options.vm)
-        else:
-            srv = self.get_server_by_id(self.options.vm)
+        srv = self.get_server(self.options.vm)
         floating_ip = self.get_floating_ip(self.options.ip)
 
         srv_id = srv['id']
