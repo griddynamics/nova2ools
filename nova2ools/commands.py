@@ -649,16 +649,16 @@ class BillingCommand(CliCommand):
     @add_argument("--time-period", required=False, help="Set time period")
     @add_argument("--period-start", required=False, help="Set time period start")
     @add_argument("--period-end", required=False, help="Set time period end")
-    @add_argument("--instances", required=False, help="Set time period end", action="store_true", default=False)
-    @add_argument("--images", required=False, help="Set time period end", action="store_true", default=False)
-    @add_argument("--long", required=False, help="Set time period end", action="store_true", default=False)
+    @add_argument("--instances", required=False, help="Include statistics about instances", action="store_true", default=False)
+    @add_argument("--images", required=False, help="Include statistics about images", action="store_true", default=False)
+    @add_argument("--details", required=False, help="Include detailed statistics", action="store_true", default=False)
     def list(self):
         include = []
         if self.options.instances:
             include.append("instances")
         if self.options.images:
             include.append("images")
-        if self.options.long:
+        if self.options.details:
             include = ([opt + "-long" for opt in include]
                        if include else ["instances-long"])
         params = ["include=" + ",".join(include)] if include else []
