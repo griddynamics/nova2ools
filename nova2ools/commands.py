@@ -53,6 +53,10 @@ class CliCommand(object):
         self.client = client_class(self.options, **kwargs)
         self.tenant_by_id = None
 
+    @handle_command_error
+    def run(self):
+        self.options.subcommand()
+
     def get(self, path=""):
         return self.client.get(getattr(self, "RESOURCE", "") + path)
 
@@ -208,10 +212,6 @@ class FlavorsCommand(CliCommand):
         for flv in flavors["flavors"]:
             sys.stdout.write("{id}: {name} ram:{ram} vcpus:{vcpus} swap:{swap} disc:{disk}\n".format(**flv))
 
-    @handle_command_error
-    def run(self):
-        self.options.subcommand()
-
 
 class ImagesCommand(CliCommand):
     __metaclass__ = CliCommandMetaclass
@@ -243,10 +243,6 @@ class ImagesCommand(CliCommand):
                         first = False
                     else:
                         sys.stdout.write("          {0:14} -> {1}\n".format(key, value))
-
-    @handle_command_error
-    def run(self):
-        self.options.subcommand()
 
     @staticmethod
     def __filter_images(img):
@@ -328,10 +324,6 @@ class SshKeysCommand(CliCommand):
                 return
         raise CommandError(1, "key not found")
 
-    @handle_command_error
-    def run(self):
-        self.options.subcommand()
-
 
 class VmsCommand(CliCommand):
     __metaclass__ = CliCommandMetaclass
@@ -410,10 +402,6 @@ class VmsCommand(CliCommand):
         srv = self.get_server(self.options.vm)
         url ="/%s/migrate" % srv['id']
         return self.post(url)
-
-    @handle_command_error
-    def run(self):
-        self.options.subcommand()
 
     def get_image_detail(self, id):
         return self.__get_detail_cached(id, "/images", self.__images)["image"]
@@ -616,10 +604,6 @@ class SecGroupsCommand(CliCommand):
         for rule in sg["rules"]:
             self.client.delete("/os-security-group-rules/{id}".format(**rule))
 
-    @handle_command_error
-    def run(self):
-        self.options.subcommand()
-
     def __format(self, sg):
         result = []
         tenant_name=self.get_tenant_name_by_id(sg["tenant_id"])
@@ -658,10 +642,6 @@ class BillingCommand(CliCommand):
 
     def __init__(self):
         super(BillingCommand, self).__init__("Manage billing subsystem", service_type="nova_billing")
-
-    @handle_command_error
-    def run(self):
-        self.options.subcommand()
 
     @handle_command_error
     @subcommand("Get statistics")
@@ -736,10 +716,6 @@ class FloatingIpCommand(CliCommand):
 
     def __init__(self):
         super(FloatingIpCommand, self).__init__("Working with floating ips")
-
-    @handle_command_error
-    def run(self):
-        self.options.subcommand()
 
     @handle_command_error
     @subcommand("Get floating ips")
