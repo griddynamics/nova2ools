@@ -71,6 +71,7 @@ class TokenInfo(object):
 
 class NovaApiClient(object):
     ARGUMENTS = [
+        (("--use-keystone",), {"help": "Keystone or Nova URL for authentication"}),
         (("--auth-url",), {"help": "Keystone or Nova URL for authentication"}),
         (("--username", "-u"), {"help": "OpenStack user name"}),
         (("--password", "-p"), {"help": "OpenStack API password"}),
@@ -82,6 +83,7 @@ class NovaApiClient(object):
     ]
 
     DEFAULTS = {
+        "use_keystone": os.environ.get("USE_KEYSTONE", False) in ("1", "true", "True", "TRUE", "yes", "Yes", "YES"),
         "auth_url": os.environ.get("OS_AUTH_URL", os.environ.get("NOVA_URL")),
         "username": os.environ.get("OS_USERNAME", os.environ.get("NOVA_USERNAME")),
         "password": os.environ.get("OS_PASSWORD", os.environ.get("NOVA_API_KEY")),
@@ -104,10 +106,13 @@ class NovaApiClient(object):
         if not (self.options.token and self.options.endpoint):
             if not self.options.auth_url:
                 raise CommandError(1, "Authentication URL is required")
-            if urlparse(self.options.auth_url).path.startswith("/v1.1"):
-                self.auth_nova()
-            else:
+
+            if self.options.use_keystone is None:
+                raise CommandError(1, "You should select auth type (use_keystone parameter)")
+            if self.options.use_keystone:
                 self.auth_keystone()
+            else:
+                self.auth_nova()
         else:
             self.__auth_headers = {
                 "X-Auth-Token": self.__token,
@@ -150,6 +155,8 @@ class NovaApiClient(object):
                 "POST",
                 body=params,
                 headers={"Content-Type": "application/json"})
+        if access is None:
+            raise CommandError(1, "You are not authenticated")
         self.token_info = TokenInfo(access)
         if not self.__management_url and self.service_type:
             self.set_service_type(self.service_type)
