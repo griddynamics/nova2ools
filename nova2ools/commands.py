@@ -1,4 +1,5 @@
 import base64
+import urlparse
 import os
 import sys
 import urllib
@@ -12,6 +13,8 @@ from client import NovaApiClient
 from exceptions import CommandError
 from exceptions import handle_command_error
 from nova2ools import VERSION
+from nova2ools.glance.client import GlanceClient
+from nova2ools.glance.utils import convert_timestamps_to_datetimes
 from nova2ools.utils import generate_password
 
 
@@ -60,8 +63,8 @@ class CliCommand(object):
     def get(self, path=""):
         return self.client.get(getattr(self, "RESOURCE", "") + path)
 
-    def post(self, path, body=None):
-        return self.client.post(getattr(self, "RESOURCE", "") + path, body)
+    def post(self, path, body=None, url=None):
+        return self.client.post(getattr(self, "RESOURCE", "") + path, body, url)
 
     def action(self, path):
         return self.client.action(getattr(self, "RESOURCE", "") + path)
@@ -221,47 +224,191 @@ class ImagesCommand(CliCommand):
     def __init__(self):
         super(ImagesCommand, self).__init__("List images available for the project")
 
+        self.init_glance_client()
+
+    def init_glance_client(self):
+        if self.options.use_keystone:
+            glance_url = self.client.url_for(service_type='image')
+        else:
+            glance_url = self.options.glance_url
+        use_keystone = self.options.use_keystone
+        parsed = urlparse.urlparse(glance_url)
+        use_ssl = parsed.scheme == 'https'
+        host = parsed.hostname
+        port = parsed.port or 80
+        doc_root = parsed.path
+        auth_token = self.client.auth_token
+        username = self.client.username
+        tenant_id = self.client.tenant_id
+        self.glance_client = GlanceClient(host, port, use_ssl, doc_root, auth_token, username, tenant_id, use_keystone)
+
     @subcommand("List available images")
     @add_argument(
         "-f", "--format",
-        default="{name:20} 0x{id:08x},{id:<5} {status:10}",
+        default="{name:20} 0x{id:08x},{id:<5} {type} {status:10}",
         help="Set output format. The format syntax is the same as for Python `str.format` method. " +
-             "Available variables: `id`, `name`, `created`, `updated`, `status`, `progress`, `metadata`. Default format: " +
-             "\"{name:20} 0x{id:08x},{id:<5} {status:10}\""
+             "Available variables: `id`, `name`, `created`, `updated`, `type`, `status`, " \
+             "`size`, `checksum`, `is_public`, `metadata`. Default format: " +
+             "\"{name:20} 0x{id:08x},{id:<5} {type} {status:10}\""
     )
     @add_argument("-m", "--metadata", action="store_true", default=False, help="Include metadata information to output")
     def list(self):
-        images = self.get("/detail")
+        images = self.glance_client.get_images_detailed()
         format = self.options.format
-        for img in ifilter(self.__filter_images, images["images"]):
+        for img in ifilter(self.__filter_images, images):
+            img = convert_timestamps_to_datetimes(img)
             self.__print_image_format(format, img)
-            if self.options.metadata and len(img["metadata"]) > 0:
+            if self.options.metadata and len(img["properties"]) > 0:
                 first = True
-                for key, value in img["metadata"].items():
+                for key, value in img["properties"].items():
                     if first:
                         sys.stdout.write("Metadata: {0:5} -> {1}\n".format(key, value))
                         first = False
                     else:
                         sys.stdout.write("          {0:14} -> {1}\n".format(key, value))
 
+    @subcommand("Register all images to glance", name="register-all")
+    @add_argument('--image', metavar='<image>', help='Image')
+    @add_argument('--kernel', metavar='<kernel>', help='Kernel')
+    @add_argument('--ramdisk', metavar='<ramdisk>', help='RAM disk')
+    @add_argument('--name', metavar='<name>', help='Image name')
+    @add_argument('--public', metavar="<'T'|'F'>",
+        help='Image public or not')
+    @add_argument('--arch', metavar='<arch>', help='Architecture')
+    def register_all(self):
+        """Uploads an image, kernel, and ramdisk into the image_service"""
+        image_path = self.options.image
+        kernel_path = self.options.kernel
+        ramdisk_path = self.options.ramdisk
+        name = self.options.name
+        public = self.options.public or 'F'
+        architecture = self.options.arch or 'x86_64'
+        owner = self.client.username
+
+        kernel_id = self._register('aki', 'aki', kernel_path, owner,
+            public=public, architecture=architecture)
+
+        ramdisk_id = self._register('ari', 'ari', ramdisk_path, owner,
+            public=public, architecture=architecture)
+
+        self._register( 'ami', 'ami', image_path, owner, name, public,
+            architecture, kernel_id, ramdisk_id)
+
+
+    @subcommand("Register image to glance", name="register")
+    @add_argument('--path', metavar='<path>', help='Image path')
+    @add_argument('--name', metavar='<name>', help='Image name')
+    @add_argument('--public', metavar="<'T'|'F'>",
+        help='Image public or not')
+    @add_argument('--arch', metavar='<arch>',
+        help='Architecture')
+    @add_argument('--cont-format', dest='container_format',
+        metavar='<container format>',
+        help='Container format(default bare)')
+    @add_argument('--disk-format', metavar='<disk format>',
+        help='Disk format(default: raw)')
+    @add_argument('--kernel', dest='kernel_id', metavar='<kernel>', help='Kernel')
+    @add_argument('--ramdisk', dest='ramdisk_id', metavar='<ramdisk>', help='RAM disk')
+    def image_register(self):
+        """Uploads an image into the image_service"""
+
+        path = self.options.path
+        owner = self.client.username
+        name = self.options.name
+        public = self.options.public or 'F'
+        architecture = self.options.arch or 'x86_64'
+        container_format = self.options.container_format or 'bare'
+        disk_format = self.options.disk_format or 'raw'
+        kernel_id = self.options.kernel_id
+        ramdisk_id = self.options.ramdisk_id
+
+        return self._register(container_format, disk_format, path,
+            owner, name, public, architecture,
+            kernel_id, ramdisk_id)
+
+    @subcommand("Register kernel image to glance", name="register-kernel")
+    @add_argument('--path', metavar='<path>', help='Image path')
+    @add_argument('--name', metavar='<name>', help='Image name')
+    @add_argument('--public', metavar="<'T'|'F'>",
+        help='Image public or not')
+    @add_argument('--arch', metavar='<arch>',
+        help='Architecture')
+    def kernel_register(self):
+        """Uploads a kernel into the image_service"""
+        path = self.options.path
+        owner = self.client.username
+        name = self.options.name
+        public = self.options.public or 'F'
+        architecture = self.options.arch or 'x86_64'
+
+        return self._register('aki', 'aki', path, owner, name,
+            public, architecture)
+
+    @subcommand("Register ramdisk image to glance", name="register-ramdisk")
+    @add_argument('--path', metavar='<path>', help='Image path')
+    @add_argument('--name', metavar='<name>', help='Image name')
+    @add_argument('--public', metavar="<'T'|'F'>",
+        help='Image public or not')
+    @add_argument('--arch', metavar='<arch>',
+        help='Architecture')
+    def ramdisk_register(self):
+        """Uploads a ramdisk into the image_service"""
+        path = self.options.path
+        owner = self.client.username
+        name = self.options.name
+        public = self.options.public or 'F'
+        architecture = self.options.arch or 'x86_64'
+
+        return self._register('ari', 'ari', path, owner, name,
+            public, architecture)
+
+    def _register(self, container_format, disk_format,
+                  path, owner, name=None, public='F',
+                  architecture='x86_64', kernel_id=None, ramdisk_id=None):
+        meta = {'is_public': (public == 'T'),
+                'name': name,
+                'container_format': container_format,
+                'disk_format': disk_format,
+                'properties': {'image_state': 'available',
+                               'project_id': owner,
+                               'architecture': architecture,
+                               'image_location': 'local'}}
+        if kernel_id:
+            meta['properties']['kernel_id'] = int(kernel_id)
+        if ramdisk_id:
+            meta['properties']['ramdisk_id'] = int(ramdisk_id)
+        try:
+            with open(path) as ifile:
+                image = self.glance_client.add_image(meta, ifile)
+            new = image['id']
+            print "Image registered to %(new)s (%(new)08x)." % locals()
+            return new
+        except Exception as exc:
+            print "Failed to register %(path)s: %(exc)s" % locals()
+
+
     @staticmethod
     def __filter_images(img):
         return (
             img["name"] is not None
-            and img["status"] == "ACTIVE"
+            and img["status"] == "active"
             )
 
     def __print_image_format(self, format, image):
-        id = int(image["id"])
-        name = image["name"]
-        created = image["created"]
-        updated = image["updated"]
-        status = image["status"]
-        progress = image["progress"]
+        id          = int(image["id"])
+        name        = image["name"]
+        created     = image["created_at"]
+        updated     = image["updated_at"]
+        status      = image["status"]
+        type        = image['container_format']
+        size        = str(image['size']) + 'b'
+        checksum    = image['checksum']
+        is_public   = image['is_public']
+
         metadata = ", ".join(
             (
                 "{0}={1}".format(k, v)
-                for k, v in image["metadata"].items()
+                for k, v in image["properties"].items()
             )
         )
         info = dict(locals())
