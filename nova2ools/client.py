@@ -73,6 +73,7 @@ class NovaApiClient(object):
     ARGUMENTS = [
         (("--use-keystone",), {"help": "Keystone or Nova URL for authentication"}),
         (("--auth-url",), {"help": "Keystone or Nova URL for authentication"}),
+        (("--glance-url",), {"help": "Glance managment url"}),
         (("--username", "-u"), {"help": "OpenStack user name"}),
         (("--password", "-p"), {"help": "OpenStack API password"}),
         (("--tenant-id",), {"help": "OpenStack Project(Tenant) ID"}),
@@ -82,9 +83,12 @@ class NovaApiClient(object):
         (("--debug",), {"action": "store_true", "help": "Run in debug mode"}),
     ]
 
+    use_keystone = os.environ.get("USE_KEYSTONE", False) in ("1", "true", "True", "TRUE", "yes", "Yes", "YES")
+
     DEFAULTS = {
-        "use_keystone": os.environ.get("USE_KEYSTONE", False) in ("1", "true", "True", "TRUE", "yes", "Yes", "YES"),
+        "use_keystone": use_keystone,
         "auth_url": os.environ.get("OS_AUTH_URL", os.environ.get("NOVA_URL")),
+        "glance_url":  os.environ.get("GLANCE_URL", "") if not use_keystone else "",
         "username": os.environ.get("OS_USERNAME", os.environ.get("NOVA_USERNAME")),
         "password": os.environ.get("OS_PASSWORD", os.environ.get("NOVA_API_KEY")),
         "tenant_id": os.environ.get("OS_TENANT_ID"),
@@ -146,6 +150,7 @@ class NovaApiClient(object):
                                                        "password": password}}}
         else:
             raise CommandError(1, "A username and password or token is required")
+
         if tenant_id:
             params['auth']['tenantId'] = tenant_id
         elif tenant_name:
@@ -158,23 +163,43 @@ class NovaApiClient(object):
         if access is None:
             raise CommandError(1, "You are not authenticated")
         self.token_info = TokenInfo(access)
+
         if not self.__management_url and self.service_type:
             self.set_service_type(self.service_type)
+
         self.__auth_headers = {
             "X-Auth-Token": self.token_info.get_token()
         }
-        if tenant_id:
-            self.__auth_headers["X-Tenant"] = tenant_id
+        if not tenant_id:
+            tenant_id = access['access']['token']['tenant']['id']
+            self.options.tenant_id = tenant_id
+        self.__auth_headers["X-Tenant"] = tenant_id
         if tenant_name:
             self.__auth_headers["X-Tenant-Name"] = tenant_name
 
+    @property
+    def auth_token(self):
+        return self.__auth_headers["X-Auth-Token"]
+
+    @property
+    def tenant_id(self):
+        return self.options.tenant_id
+
+    @property
+    def username(self):
+        return self.options.username
+
     def set_service_type(self, service_type, endpoint_type='publicURL'):
-        try:
-            self.__management_url = self.token_info.url_for(
+        self.__management_url = self.url_for(
                     service_type=service_type, endpoint_type=endpoint_type)
+        self.service_type = service_type
+
+    def url_for(self, service_type, endpoint_type='publicURL'):
+        try:
+            return self.token_info.url_for(
+            service_type=service_type, endpoint_type=endpoint_type)
         except EndpointNotFound:
             raise CommandError(1, "Could not find `%s' in service catalog" % service_type)
-        self.service_type = service_type
 
     def http_log(self, args, kwargs, resp, body):
         if not self.options.debug:
