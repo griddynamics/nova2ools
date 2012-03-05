@@ -221,6 +221,7 @@ class ImagesCommand(CliCommand):
 
     RESOURCE = "/images"
 
+    @handle_command_error
     def __init__(self):
         super(ImagesCommand, self).__init__("List images available for the project")
 
@@ -241,8 +242,8 @@ class ImagesCommand(CliCommand):
         username = self.client.username
         tenant_id = self.client.tenant_id
 
-        if use_keystone and not glance_url:
-            raise CommandError(1, "You should specify GLANCE_URL env variable if you don't work through keystone")
+        if not use_keystone and not glance_url:
+            raise CommandError(1, "You should specify GLANCE_URL environment variable if you don't work through keystone")
 
         self.glance_client = GlanceClient(host, port, use_ssl, doc_root, auth_token, username, tenant_id, use_keystone)
 
