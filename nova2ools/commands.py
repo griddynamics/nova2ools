@@ -119,12 +119,25 @@ class CliCommand(object):
             raise CommandError(1, "VM `{0}` is not found".format(id))
         return server
 
+    def get_flavor(self, identifier):
+        if not identifier.isdigit():
+            return self.get_flavor_by_name(identifier)
+        return self.get_flavor_by_id(identifier)
+
     def get_flavor_by_name(self, name):
-        flavors = self.client.get("/flavors/detail")["flavors"]
-        for flv in flavors:
-            if flv["name"] == name:
-                return flv
-        raise CommandError(1, "Flavor `{0}` is not found".format(name))
+        flavors = self.client.get("/flavors/detail?name={0}".format(name))["flavors"]
+        if len(flavors) < 1:
+            raise CommandError(1, "Flavor `{0}` is not found".format(name))
+        if len(flavors) > 1:
+            msg = "More then one({0}) flavor with `{1}` name (use `id` instead of name)".format(len(flavors), name)
+            raise CommandError(1, msg)
+        return flavors[0]
+
+    def get_flavor_by_id(self, id):
+        flavor = self.client.get("/flavors/{0}".format(id))["flavor"]
+        if not flavor:
+            raise CommandError(1, "Flavor `{0}` is not found".format(id))
+        return flavor
 
     def get_image(self, identifier):
         if not identifier.isdigit():
@@ -511,7 +524,7 @@ class VmsCommand(CliCommand):
     @add_argument("-s", "--security-groups", nargs="*", help="Apply security groups to a new VM")
     def spawn(self):
         img = self.get_image(self.options.image)
-        flv = self.get_flavor_by_name(self.options.flavor)
+        flv = self.get_flavor(self.options.flavor)
         srvDesc = {
             "name": self.options.name,
             "imageRef": img["links"][0]["href"],
