@@ -3,6 +3,7 @@ import urlparse
 import os
 import sys
 import urllib
+from nova2ools import utils
 
 from argparse import ArgumentParser
 from inspect import ismethod
@@ -861,6 +862,88 @@ class BillingCommand(CliCommand):
                         print item_descr
                         print "\t\t{0}".format(self.format_usage(object_item["usage"]))
                 print "total:\t\t{0}".format(self.format_usage(statistics_value["usage"]))
+
+
+class LocalVolumesCommand(CliCommand):
+
+    __metaclass__ = CliCommandMetaclass
+
+    def __init__(self):
+        super(LocalVolumesCommand, self).__init__("Manages Volumes system")
+
+    @handle_command_error
+    @subcommand('Create local volume', 'create')
+    @add_argument("--vm", required=True, help="Instance name or id attach volume to")
+    @add_argument("--snapshot", required=False, help="Snapshot id create volume from")
+    @add_argument("--device", required=True, help="Device name in guest OS. Example: /dev/vdb")
+    @add_argument("--size", required=False, help="Size of new volume. Measures in bytes by default\n" \
+                                                 "Examples:\n" \
+                                                 "100, 100b, 100K ,100M , 100G")
+    def create_volume(self):
+        id = self.get_server(self.options.vm).get('id', None)
+        body = {
+                'volume': {
+                    'instance_id': id,
+                    'snapshot_id': self.options.snapshot,
+                    'device': self.options.device,
+                    'size': self.options.size,
+                    }
+        }
+        response = self.post('/gd-local-volumes', body)
+        vol = response['volume']
+        utils.print_item((
+            ('id', vol['id']),
+            ('status', vol['status']),
+            ('size', vol['size']),
+            ('instance_id', vol['instance_id']),
+            ('device', vol['device'])
+        ))
+
+    @handle_command_error
+    @subcommand("Delete local volume", "delete")
+    @add_argument("--id", required=True, help="Local Volume id")
+    def delete_volume(self):
+        self.delete('/gd-local-volumes/' + self.options.id)
+
+    @handle_command_error
+    @subcommand("Resize local volume", "resize")
+    @add_argument("--id", required=True, help="Local volume id")
+    @add_argument("--size", required=True, help="New size of local volume. Measures in bytes by default.\n" \
+                                                     "Examples:\n" \
+                                                     "100, 100b, 100K ,100M , 100G")
+    def resize_volume(self):
+        body = {
+            'volume': {
+                'size': self.options.size
+            }
+        }
+        self.put('/gd-local-volumes/%s' % self.options.id, body)
+
+    @handle_command_error
+    @subcommand("Snapshot local volume", "snapshot")
+    @add_argument("--id", required=True, help="Local volume id")
+    @add_argument("--name", required=True, help="Name of newly created snapshot")
+    def snapshot_volume(self):
+        body = {
+            'volume_id': self.options.id,
+            'name': self.options.name
+        }
+
+        self.post('/gd-local-volumes-snapshotting', body)
+
+    @handle_command_error
+    @subcommand("List of local volumes", "list")
+    @add_argument(
+        "-f", "--format",
+        default="{id:6} {instance_id:10} {status:10} {size:20} {device:20}",
+        help="Set output format. The format syntax is the same as for Python `str.format` method. " +
+        "Available variables: `id`, `instance_id`, `status`, `size`, `device`. " \
+        "Default format: " +
+        "\"{id:6} {instance_id:10} {status:10} {size:20} {device:20}\""
+    )
+    def list_volumes(self):
+        response = self.get("/gd-local-volumes")
+        utils.print_table(response['volumes'], self.options.format)
 
 
 class FloatingIpCommand(CliCommand):

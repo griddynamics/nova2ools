@@ -1,6 +1,5 @@
 import httplib
 import json
-import sys
 import os
 
 import logging
@@ -128,7 +127,7 @@ class NovaApiClient(object):
             "X-Auth-Key": self.options.password,
             "X-Auth-Project-Id": self.options.tenant_name
         }
-        resp, body = self.request(self.options.auth_url, "GET", headers=auth_headers)
+        resp, _ = self.request(self.options.auth_url, "GET", headers=auth_headers)
         self.__token = resp.getheader("X-Auth-Token")
         if not self.__management_url:
             self.__management_url = resp.getheader("X-Server-Management-Url")
@@ -155,7 +154,7 @@ class NovaApiClient(object):
             params['auth']['tenantId'] = tenant_id
         elif tenant_name:
             params['auth']['tenantName'] = tenant_name
-        resp, access = self.request(
+        _, access = self.request(
                 self.options.auth_url + "/tokens",
                 "POST",
                 body=params,
