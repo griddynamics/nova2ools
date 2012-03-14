@@ -597,6 +597,13 @@ class VmsCommand(CliCommand):
                 "destination": self.options.destination
             }})
 
+    @subcommand("Get security groups")
+    @add_argument("vm", help="VM id or name")
+    def get_sg(self):
+        srv = self.get_server(self.options.vm)
+        url = "/%s/list_sg" % srv['id']
+        return self.get(url)
+
     def get_image_detail(self, id):
         return self.__get_detail_cached(id, "/images", self.__images)["image"]
 
