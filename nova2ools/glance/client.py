@@ -4,8 +4,6 @@ import os
 from nova2ools.exceptions import CommandError
 from nova2ools.glance.utils import image_meta_to_http_headers, get_image_meta_from_headers
 
-__author__ = 'pshkitin'
-
 import httplib
 import logging
 import socket

@@ -67,9 +67,6 @@ class CliCommand(object):
     def post(self, path, body=None):
         return self.client.post(getattr(self, "RESOURCE", "") + path, body)
 
-    def action(self, path):
-        return self.client.action(getattr(self, "RESOURCE", "") + path)
-
     def put(self, path, body):
         return self.client.put(getattr(self, "RESOURCE", "") + path, body)
 
@@ -125,13 +122,14 @@ class CliCommand(object):
         return self.get_flavor_by_id(identifier)
 
     def get_flavor_by_name(self, name):
-        flavors = self.client.get("/flavors/detail?name={0}".format(name))["flavors"]
-        if len(flavors) < 1:
+        flavors = self.client.get("/flavors/detail")["flavors"]
+        res = filter(lambda flavor: flavor.get('name') == name, flavors)
+        if len(res) < 1:
             raise CommandError(1, "Flavor `{0}` is not found".format(name))
-        if len(flavors) > 1:
+        if len(res) > 1:
             msg = "More then one({0}) flavor with `{1}` name (use `id` instead of name)".format(len(flavors), name)
             raise CommandError(1, msg)
-        return flavors[0]
+        return res[0]
 
     def get_flavor_by_id(self, id):
         flavor = self.client.get("/flavors/{0}".format(id))["flavor"]
@@ -287,21 +285,21 @@ class ImagesCommand(CliCommand):
                         sys.stdout.write("          {0:14} -> {1}\n".format(key, value))
 
     @subcommand("Register all images to glance", name="register-all")
-    @add_argument('--image', metavar='<image>', help='Image')
-    @add_argument('--kernel', metavar='<kernel>', help='Kernel')
-    @add_argument('--ramdisk', metavar='<ramdisk>', help='RAM disk')
+    @add_argument('--image', metavar='<image>', help='Path to image')
+    @add_argument('--kernel', metavar='<kernel>', help='Path to kernel')
+    @add_argument('--ramdisk', metavar='<ramdisk>', help='Path to RAM disk')
     @add_argument('--name', metavar='<name>', help='Image name')
-    @add_argument('--public', metavar="<'T'|'F'>",
-        help='Image public or not')
-    @add_argument('--arch', metavar='<arch>', help='Architecture')
+    @add_argument('--public', action="store_true", default=False,
+        help='Allow use image from other tenants')
+    @add_argument('--arch', metavar='<arch>', default='x86_64', help='Architecture')
     def register_all(self):
         """Uploads an image, kernel, and ramdisk into the image_service"""
         image_path = self.options.image
         kernel_path = self.options.kernel
         ramdisk_path = self.options.ramdisk
         name = self.options.name
-        public = self.options.public or 'F'
-        architecture = self.options.arch or 'x86_64'
+        public = self.options.public
+        architecture = self.options.arch
         owner = self.client.username
 
         kernel_id = self._register('aki', 'aki', kernel_path, owner,
@@ -317,27 +315,27 @@ class ImagesCommand(CliCommand):
     @subcommand("Register image to glance", name="register")
     @add_argument('--path', metavar='<path>', help='Image path')
     @add_argument('--name', metavar='<name>', help='Image name')
-    @add_argument('--public', metavar="<'T'|'F'>",
-        help='Image public or not')
-    @add_argument('--arch', metavar='<arch>',
+    @add_argument('--public', action="store_true", default=False,
+        help='Allow use image from other tenants')
+    @add_argument('--arch', metavar='<arch>', default='x86_64',
         help='Architecture')
-    @add_argument('--cont-format', dest='container_format',
+    @add_argument('--cont-format', dest='container_format', default='bare',
         metavar='<container format>',
         help='Container format(default bare)')
-    @add_argument('--disk-format', metavar='<disk format>',
+    @add_argument('--disk-format', metavar='<disk format>', default='raw',
         help='Disk format(default: raw)')
-    @add_argument('--kernel', dest='kernel_id', metavar='<kernel>', help='Kernel')
-    @add_argument('--ramdisk', dest='ramdisk_id', metavar='<ramdisk>', help='RAM disk')
+    @add_argument('--kernel', dest='kernel_id', metavar='<kernel>', help='Kernel id')
+    @add_argument('--ramdisk', dest='ramdisk_id', metavar='<ramdisk>', help='RAM disk id')
     def image_register(self):
         """Uploads an image into the image_service"""
 
         path = self.options.path
         owner = self.client.username
         name = self.options.name
-        public = self.options.public or 'F'
-        architecture = self.options.arch or 'x86_64'
-        container_format = self.options.container_format or 'bare'
-        disk_format = self.options.disk_format or 'raw'
+        public = self.options.public
+        architecture = self.options.arch
+        container_format = self.options.container_format
+        disk_format = self.options.disk_format
         kernel_id = self.options.kernel_id
         ramdisk_id = self.options.ramdisk_id
 
@@ -348,17 +346,17 @@ class ImagesCommand(CliCommand):
     @subcommand("Register kernel image to glance", name="register-kernel")
     @add_argument('--path', metavar='<path>', help='Image path')
     @add_argument('--name', metavar='<name>', help='Image name')
-    @add_argument('--public', metavar="<'T'|'F'>",
-        help='Image public or not')
-    @add_argument('--arch', metavar='<arch>',
+    @add_argument('--public', action="store_true", default=False,
+        help='Allow use image from other tenants')
+    @add_argument('--arch', metavar='<arch>', default='x86_64',
         help='Architecture')
     def kernel_register(self):
         """Uploads a kernel into the image_service"""
         path = self.options.path
         owner = self.client.username
         name = self.options.name
-        public = self.options.public or 'F'
-        architecture = self.options.arch or 'x86_64'
+        public = self.options.public
+        architecture = self.options.arch
 
         return self._register('aki', 'aki', path, owner, name,
             public, architecture)
@@ -366,25 +364,25 @@ class ImagesCommand(CliCommand):
     @subcommand("Register ramdisk image to glance", name="register-ramdisk")
     @add_argument('--path', metavar='<path>', help='Image path')
     @add_argument('--name', metavar='<name>', help='Image name')
-    @add_argument('--public', metavar="<'T'|'F'>",
-        help='Image public or not')
-    @add_argument('--arch', metavar='<arch>',
+    @add_argument('--public', action="store_true", default=False,
+        help='Allow use image from other tenants')
+    @add_argument('--arch', metavar='<arch>', default='x86_64',
         help='Architecture')
     def ramdisk_register(self):
         """Uploads a ramdisk into the image_service"""
         path = self.options.path
         owner = self.client.username
         name = self.options.name
-        public = self.options.public or 'F'
-        architecture = self.options.arch or 'x86_64'
+        public = self.options.public
+        architecture = self.options.arch
 
         return self._register('ari', 'ari', path, owner, name,
             public, architecture)
 
     def _register(self, container_format, disk_format,
-                  path, owner, name=None, public='F',
+                  path, owner, name=None, public=False,
                   architecture='x86_64', kernel_id=None, ramdisk_id=None):
-        meta = {'is_public': (public == 'T'),
+        meta = {'is_public': public,
                 'name': name,
                 'container_format': container_format,
                 'disk_format': disk_format,

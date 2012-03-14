@@ -70,7 +70,7 @@ class TokenInfo(object):
 
 class NovaApiClient(object):
     ARGUMENTS = [
-        (("--use-keystone",), {"help": "Keystone or Nova URL for authentication"}),
+        (("--use-keystone",), {"action": "store_true", "help": "Keystone or Nova URL for authentication"}),
         (("--auth-url",), {"help": "Keystone or Nova URL for authentication"}),
         (("--glance-url",), {"help": "Glance managment url"}),
         (("--username", "-u"), {"help": "OpenStack user name"}),
@@ -82,7 +82,7 @@ class NovaApiClient(object):
         (("--debug",), {"action": "store_true", "help": "Run in debug mode"}),
     ]
 
-    use_keystone = os.environ.get("USE_KEYSTONE", False) in ("1", "true", "True", "TRUE", "yes", "Yes", "YES")
+    use_keystone = os.environ.get("USE_KEYSTONE", "False").lower() in ("1", "true", "yes")
 
     DEFAULTS = {
         "use_keystone": use_keystone,
@@ -129,6 +129,10 @@ class NovaApiClient(object):
         }
         resp, _ = self.request(self.options.auth_url, "GET", headers=auth_headers)
         self.__token = resp.getheader("X-Auth-Token")
+        
+        if not self.__token:
+            raise CommandError(1, "You are not authorized")
+
         if not self.__management_url:
             self.__management_url = resp.getheader("X-Server-Management-Url")
         self.__auth_headers = {
@@ -170,7 +174,10 @@ class NovaApiClient(object):
             "X-Auth-Token": self.token_info.get_token()
         }
         if not tenant_id:
-            tenant_id = access['access']['token']['tenant']['id']
+            try:
+                tenant_id = access['access']['token']['tenant']['id']
+            except Exception:
+                raise CommandError(1, "Response json object doesn't contain chain 'access->token->tenant->id'")
             self.options.tenant_id = tenant_id
         self.__auth_headers["X-Tenant"] = tenant_id
         if tenant_name:
