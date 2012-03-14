@@ -602,7 +602,10 @@ class VmsCommand(CliCommand):
     def get_sg(self):
         srv = self.get_server(self.options.vm)
         url = "/%s/list_sg" % srv['id']
-        return self.get(url)
+        res = self.get(url)
+        print "VM %s is in next security groups:" % srv['id']
+        for r in res['result']:
+            print r
 
     def get_image_detail(self, id):
         return self.__get_detail_cached(id, "/images", self.__images)["image"]
