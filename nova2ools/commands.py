@@ -572,10 +572,11 @@ class VmsCommand(CliCommand):
         response = self.get("/detail")
         servers = response["servers"]
         for srv in servers:
-            if self.options.details:
-                self.__print_vm_detail(srv)
-            else:
-                self.__print_vm_format(self.options.format, srv)
+            #if self.options.details:
+            #    self.__print_vm_detail(srv)
+            #else:
+            #    self.__print_vm_format(self.options.format, srv)
+            print srv
 
     @subcommand("Migrate VM")
     @add_argument("vm", help="VM id or name")
@@ -606,6 +607,14 @@ class VmsCommand(CliCommand):
         print "VM %s is in next security groups:" % srv['id']
         for r in res['result']:
             print r
+
+    @subcommand("Get host for VM")
+    @add_argument("vm", help="VM id or name")
+    def get_vm_host(self):
+        srv = self.get_server(self.options.vm)
+        url = "/%s/host" % srv['id']
+        res = self.get(url)
+        print res['result']
 
     def get_image_detail(self, id):
         return self.__get_detail_cached(id, "/images", self.__images)["image"]
