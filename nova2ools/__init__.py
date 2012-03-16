@@ -1,4 +1,4 @@
-VERSION = "0.0.2"
+VERSION = "0.0.5"
 
 #noinspection PyUnresolvedReferences
 from client import NovaApiClient

@@ -1092,3 +1092,116 @@ class FloatingIpCommand(CliCommand):
         del info["format"]
         sys.stdout.write(format.format(**info))
         sys.stdout.write("\n")
+
+class DNSCommand(CliCommand):
+    __metaclass__ = CliCommandMetaclass
+
+    def __init__(self):
+        super(DNSCommand, self).__init__("Manage dns subsystem", service_type="nova_dns")
+
+    @handle_command_error
+    def run(self):
+        self.options.subcommand()
+
+    @handle_command_error
+    @subcommand("Get zones list")
+    def zonelist(self):
+        for zone in self.request('GET', '/zone/'):
+            print "\t{0}".format(zone)
+
+    @handle_command_error
+    @subcommand("Add zone")
+    @add_argument("zone", help="Zone name to add")
+    @add_argument("--primary", required=False, help="Name server that will respond authoritatively for the domain")
+    @add_argument("--hostmaster", required=False, help="Email address of the person responsible for this zone")
+    @add_argument("--refresh", required=False, help="The time when the slave will try to refresh the zone from the master")
+    @add_argument("--retry", required=False, help="time between retries if the slave fails to contact the master")
+    @add_argument("--expire", required=False, help="Indicates when the zone data is no longer authoritative")
+    @add_argument("--ttl", required=False, help="Default record ttl")
+    def zoneadd(self):
+        args = ('primary', 'hostmaster', 'refresh', 'retry', 'expire', 'ttl')
+        print self.request('PUT', '/zone/', [self.options.zone], args)
+
+    @handle_command_error
+    @subcommand("Drop zone")
+    @add_argument("zone", help="Zone name to delete")
+    @add_argument("--force", required=False, help="Delete all subdomains")
+    def zonedrop(self):
+        print self.request('DELETE', '/zone/', [self.options.zone],  ('force',))
+
+    @handle_command_error
+    @subcommand("List records in zone")
+    @add_argument("zone", nargs='?', help="Zone name")
+    @add_argument("--name", required=False, help="Record name")
+    @add_argument("--type", required=False, help="Record type")
+    def list(self):
+        if not self.options.zone:
+            return self.zonelist()
+        for rec in  self.request('GET', '/record/', [self.options.zone], ('name','type')):
+            print "'%(name)s' %(type)s %(content)s (ttl: %(ttl)s, priority: %(priority)s)" % rec
+
+    @handle_command_error
+    @subcommand("Add record to zone")
+    @add_argument("zone", help="Zone name")
+    @add_argument("name", help="Record name")
+    @add_argument("type", help="Record type")
+    @add_argument("content", help="Record content")
+    @add_argument("--ttl", required=False, help="Record ttl")
+    @add_argument("--priority", required=False, help="Record priority")
+    def add(self):
+        name = self.options.name if self.options.name else '@'
+        print self.request('PUT', '/record/', 
+            [self.options.zone, name, self.options.type, self.options.content],
+            ('ttl', 'priority'))
+
+    @handle_command_error
+    @subcommand("Edit record in zone")
+    @add_argument("zone", help="Zone name")
+    @add_argument("name", help="Record name")
+    @add_argument("type", help="Record type")
+    @add_argument("--content", help="Record content")
+    @add_argument("--ttl", required=False, help="Record ttl")
+    @add_argument("--priority", required=False, help="Record priority")
+    def edit(self):
+        name = self.options.name if self.options.name else '@'
+        print self.request('POST', '/record/', 
+            [self.options.zone, name, self.options.type],
+            ('ttl', 'priority', 'content'))
+
+    @handle_command_error
+    @subcommand("Delete record from zone")
+    @add_argument("zone", help="Zone name")
+    @add_argument("name", help="Record name")
+    @add_argument("type", help="Record type")
+    def drop(self):
+        name = self.options.name if self.options.name else '@'
+        print self.request('DELETE', '/record/', 
+            [self.options.zone, name, self.options.type])
+
+
+    def request(self, method, path, addtopath=None, args=None):
+        #FIXME urlencode addtopath ?
+        req = path + '/'.join(addtopath) if addtopath else path
+        if args:
+            params = {}
+            for o, v in vars(self.options).iteritems():
+                if o not in args or v is None: 
+                    continue
+                params[o] = v
+            if params:
+                req = "%s?%s" % (req, urllib.urlencode(params))
+        resp = {}
+        #FIXME probably change NovaClient to remove this ?? 
+        if method == 'GET':
+            resp = self.get(req)
+        elif method == 'POST':
+            resp = self.post(req, None)
+        elif method == 'PUT':
+            resp = self.put(req, None)
+        elif method == 'DELETE':
+            resp = self.delete(req)
+        else:
+            raise CommandError(1, 'Unknown method %s' % method)
+        if resp['error']:
+            raise CommandError(1, resp['error'])
+        return resp['result']

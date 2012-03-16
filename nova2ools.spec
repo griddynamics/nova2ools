@@ -1,7 +1,7 @@
 %define mod_name nova2ools
 
 Name:             nova2ools
-Version:          0.0.4
+Version:          0.0.5
 Release:          1
 Summary:          Tools to work with OpenStack
 License:          GNU GPL v3
