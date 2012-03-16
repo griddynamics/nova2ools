@@ -264,13 +264,30 @@ class ImagesCommand(CliCommand):
         "-f", "--format",
         default="{name:20} 0x{id:08x},{id:<5} {type} {status:10}",
         help="Set output format. The format syntax is the same as for Python `str.format` method. " +
-             "Available variables: `id`, `name`, `created`, `updated`, `type`, `status`, " \
+             "Available variables: `id`, `name`, `created_at`, `updated_at`, `type`, `status`, " \
              "`size`, `checksum`, `is_public`, `metadata`. Default format: " +
              "\"{name:20} 0x{id:08x},{id:<5} {type} {status:10}\""
     )
     @add_argument("-m", "--metadata", action="store_true", default=False, help="Include metadata information to output")
+    @add_argument("--limit", type=int, default=20, help="Maximum number of items to return")
+    @add_argument("--marker", type=int, help="id after which to start the page of images")
+    @add_argument("--sort-key",
+        choices=['id', 'name', 'created_at', 'updated_at', 'status', 'size'],
+        help="Results will be ordered by this image attribute")
+    @add_argument("--sort-dir", metavar="<asc|desc>", choices=['asc', 'desc'], default="asc",
+        help="Direction in which to order results (asc, desc)")
     def list(self):
-        images = self.glance_client.get_images_detailed()
+        limit = self.options.limit
+        marker = self.options.marker
+        sort_key = self.options.sort_key
+        sort_dir = self.options.sort_dir
+
+        params = {"limit": limit,
+                  "marker": marker,
+                  "sort_key": sort_key,
+                  "sort_dir": sort_dir}
+
+        images = self.glance_client.get_images_detailed(**params)
         format = self.options.format
         for img in ifilter(self.__filter_images, images):
             img = convert_timestamps_to_datetimes(img)
@@ -414,8 +431,8 @@ class ImagesCommand(CliCommand):
     def __print_image_format(self, format, image):
         id          = int(image["id"])
         name        = image["name"]
-        created     = image["created_at"]
-        updated     = image["updated_at"]
+        created_at  = image["created_at"]
+        updated_at  = image["updated_at"]
         status      = image["status"]
         type        = image['container_format']
         size        = str(image['size']) + 'b'
