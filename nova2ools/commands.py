@@ -1134,11 +1134,19 @@ class DNSCommand(CliCommand):
     @add_argument("zone", nargs='?', help="Zone name")
     @add_argument("--name", required=False, help="Record name")
     @add_argument("--type", required=False, help="Record type")
+    @add_argument("-f", "--format", required=False,
+        default="{name:20} {type:5} {ttl:10} {content}",
+        help="Set output format. The format syntax is the same as for Python `str.format` method. " +
+        "Available variables: `name`, `type`, `content`, `ttl`, `priority`. " \
+        "Default format: " +
+        "\"{id:6} {instance_id:10} {status:10} {size:20} {device:20}\""
+    )
     def list(self):
         if not self.options.zone:
             return self.zonelist()
+        print self.options.format
         for rec in  self.request('GET', '/record/', [self.options.zone], ('name','type')):
-            print "'%(name)s' %(type)s %(content)s (ttl: %(ttl)s, priority: %(priority)s)" % rec
+            print self.options.format.format(**rec)
 
     @handle_command_error
     @subcommand("Add record to zone")
