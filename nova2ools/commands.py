@@ -572,11 +572,10 @@ class VmsCommand(CliCommand):
         response = self.get("/detail")
         servers = response["servers"]
         for srv in servers:
-            #if self.options.details:
-            #    self.__print_vm_detail(srv)
-            #else:
-            #    self.__print_vm_format(self.options.format, srv)
-            print srv
+            if self.options.details:
+                self.__print_vm_detail(srv)
+            else:
+                self.__print_vm_format(self.options.format, srv)
 
     @subcommand("Migrate VM")
     @add_argument("vm", help="VM id or name")
@@ -600,13 +599,13 @@ class VmsCommand(CliCommand):
 
     @subcommand("Get security groups")
     @add_argument("vm", help="VM id or name")
-    def get_sg(self):
+    def get_security_groups(self):
         srv = self.get_server(self.options.vm)
-        url = "/%s/list_sg" % srv['id']
+        url = "/%s/list_security_groups" % srv['id']
         res = self.get(url)
         print "VM %s is in next security groups:" % srv['id']
-        for r in res['result']:
-            print r
+        for group in res['result']:
+            print group
 
     @subcommand("Get host for VM")
     @add_argument("vm", help="VM id or name")
