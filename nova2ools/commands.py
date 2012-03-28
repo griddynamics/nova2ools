@@ -579,10 +579,23 @@ class VmsCommand(CliCommand):
 
     @subcommand("Migrate VM")
     @add_argument("vm", help="VM id or name")
+    @add_argument("--no-block-migration", action="store_true", default=False, help="Disable block migration " \
+                                                                                   "in case of live migration")
+    @add_argument("--live-migration", action="store_true", default=False, help="Perform live migration")
+    @add_argument("-d", "--destination", help="Migration destination hostname")
     def migrate(self):
         srv = self.get_server(self.options.vm)
-        url ="/%s/migrate" % srv['id']
-        return self.post(url)
+        if not self.options.live_migration:
+            url ="/%s/migrate" % srv['id']
+            return self.post(url)
+        else:
+            url = "/%s/action" % srv['id']
+            if not self.options.destination:
+                CommandError(1, "You must specify --destination <host> along with --live-migration")
+            return self.post(url, {"live_migrate": {
+                "block_migration": not self.options.no_block_migration,
+                "destination": self.options.destination
+            }})
 
     def get_image_detail(self, id):
         return self.__get_detail_cached(id, "/images", self.__images)["image"]
