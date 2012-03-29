@@ -561,11 +561,11 @@ class VmsCommand(CliCommand):
     @subcommand("List spawned VMs")
     @add_argument(
         "-f", "--format",
-        default="{name:20} 0x{id:08x},{id:<5} {user_id:15} {tenant_name:10} {status:10} {fixed_addresses}",
+        default="{name:20} 0x{id:08x},{id:<5} {user_id:15} {tenant_name:10} {status:10} {fixed_addresses} {key_name:15}",
         help="Set output format. The format syntax is the same as for Python `str.format` method. " +
         "Available variables: `id`, `name`, `created`, `updated`, `user_id`, `status`, `tenant_id`, `tenant_name`, " +
         "`fixed_addresses`, `float_addresses`, `image_id`. Default format: " +
-        "\"{name:20} 0x{id:08x},{id:<5} {user_id:15} {tenant_name:10} {status:10} {fixed_addresses}\""
+        "\"{name:20} 0x{id:08x},{id:<5} {user_id:15} {tenant_name:10} {status:10} {fixed_addresses} {key_name:15}\""
     )
     @add_argument("-d", "--details", default=False, action="store_true", help="Print detailed information about VM")
     def list(self):
@@ -652,6 +652,7 @@ class VmsCommand(CliCommand):
             )
         )
         image_id = vm["image"]["id"]
+        key_name = vm["key_name"]
         info = dict(locals())
         del info["self"]
         del info["vm"]
