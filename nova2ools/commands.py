@@ -607,13 +607,10 @@ class VmsCommand(CliCommand):
         for group in res['result']:
             print group
 
-    @subcommand("Get host for VM")
-    @add_argument("vm", help="VM id or name")
-    def get_vm_host(self):
-        srv = self.get_server(self.options.vm)
-        url = "/%s/host" % srv['id']
+    def get_vm_host(self, id):
+        url = "/%s/host" % id
         res = self.get(url)
-        print res['result']
+        return res['result']
 
     def get_image_detail(self, id):
         return self.__get_detail_cached(id, "/images", self.__images)["image"]
@@ -663,10 +660,12 @@ class VmsCommand(CliCommand):
     def __print_vm_detail(self, srv):
         img = self.get_image_detail(srv["image"]["id"])
         flv = self.get_flavor_detail(srv["flavor"]["id"])
+        host = self.get_vm_host(srv["id"])
         sys.stdout.write(
-            "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n"
+            "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n host:{host}\n"
             .format(
                 tenant_name=self.get_tenant_name_by_id(srv["tenant_id"]),
+                host=host,
                 **srv
             )
         )
