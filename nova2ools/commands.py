@@ -144,12 +144,13 @@ class CliCommand(object):
 
     def get_image_by_name(self, name):
         images = self.client.get("/images/detail?name={0}".format(name))["images"]
-        if len(images) < 1:
+        filtered_images = [image for image in images if image["name"] == name]
+        if len(filtered_images) < 1:
             raise CommandError(1, "Image `{0}` is not found".format(name))
-        if len(images) > 1:
+        if len(filtered_images) > 1:
             msg = "More then one({0}) image with `{1}` name (use `id` instead of name)".format(len(images), name)
             raise CommandError(1, msg)
-        return images[0]
+        return filtered_images[0]
 
     def get_image_by_id(self, id):
         image = self.client.get("/images/{0}".format(id))["image"]
