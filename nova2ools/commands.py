@@ -525,8 +525,11 @@ class VmsCommand(CliCommand):
 
     @subcommand("Show information about VM")
     @add_argument("vm", help="VM id or name")
+    @add_argument("-H", "--show-host", default=False, action="store_true", help="Show host for image (admin only)")
     def show(self):
         srv = self.get_server(self.options.vm)
+        if (self.options.show_host):
+            srv["host"] = self.get_vm_host(srv["id"])
         self.__print_vm_detail(srv)
 
     @subcommand("Spawn a new VM")
@@ -661,12 +664,10 @@ class VmsCommand(CliCommand):
     def __print_vm_detail(self, srv):
         img = self.get_image_detail(srv["image"]["id"])
         flv = self.get_flavor_detail(srv["flavor"]["id"])
-        host = self.get_vm_host(srv["id"])
         sys.stdout.write(
-            "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n host:{host}\n"
+            "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n"
             .format(
                 tenant_name=self.get_tenant_name_by_id(srv["tenant_id"]),
-                host=host,
                 **srv
             )
         )
@@ -684,6 +685,8 @@ class VmsCommand(CliCommand):
                 else:
                     prefix = "                 "
                 print "{prefix} {addr[addr]}(v{addr[version]}) net:{net_id} {type}".format(**locals())
+        if "host" in srv:
+            print "            Host: ", srv.get("host")
         print "           Image: ", img["name"],
         try:
             print "({metadata[architecture]})".format(**img)
