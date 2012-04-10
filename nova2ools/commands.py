@@ -51,6 +51,8 @@ class CliCommand(object):
 
     @handle_command_error
     def __init__(self, help, client_class=NovaApiClient, **kwargs):
+        if len(sys.argv) < 2:
+            sys.argv.append('list')
         self.__help = help
         self.__parser = self.__generate_options_parser(client_class)
         self.parse_args()
