@@ -52,8 +52,12 @@ class CliCommand(object):
 
     @handle_command_error
     def __init__(self, help, client_class=NovaApiClient, **kwargs):
-        if len(sys.argv) < 2:
-            sys.argv.append('list')
+        for arg in sys.argv[1:]:
+            if not arg.startswith('-'):
+                break
+        else:
+            sys.argv.insert(1, 'list')
+
         self.__help = help
         self.__parser = self.__generate_options_parser(client_class)
         self.parse_args()
@@ -239,7 +243,7 @@ class ImagesCommand(CliCommand):
 
     @handle_command_error
     def __init__(self):
-        super(ImagesCommand, self).__init__("List images available for the project")
+        super(ImagesCommand, self).__init__("Manage images available for the project")
 
         self.init_glance_client()
 
