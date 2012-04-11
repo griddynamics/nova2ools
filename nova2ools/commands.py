@@ -1,3 +1,4 @@
+from datetime import datetime
 import base64
 import urlparse
 import os
@@ -856,77 +857,153 @@ class ExtensionsCommand(CliCommand):
 
 class BillingCommand(CliCommand):
     __metaclass__ = CliCommandMetaclass
-    RESOURCE = "/projects"
+
+    @staticmethod
+    def url_escape(s):
+        return urllib.quote(s)
 
     def __init__(self):
         super(BillingCommand, self).__init__("Manage billing subsystem", service_type="nova_billing")
 
+    @staticmethod
+    def get_resource_tree(resources):
+        res_by_id = dict(((res["id"], res) for res in resources))
+        for res in resources:
+            try:
+                parent = res_by_id[res["parent_id"]]
+            except KeyError:
+                pass
+            else:
+                parent.setdefault("children", []).append(res)
+        return filter(
+            lambda res: res["parent_id"] not in res_by_id,
+            resources)
+
+    @staticmethod
+    def build_resource_tree(bill):
+
+        def calc_cost(res):
+            cost = res.get("cost", 0.0)
+            for child in res.get("children", ()):
+                calc_cost(child)
+                cost += child["cost"]
+            res["cost"] = cost
+
+        for acc in bill:
+            subtree = BillingCommand.get_resource_tree(
+                acc["resources"])
+            acc_cost = 0.0
+            for res in subtree:
+                calc_cost(res)
+                acc_cost = res["cost"]
+            acc["cost"] = acc_cost
+            acc["resources"] = subtree
+
+    def print_result(self, resp):
+        print "Statistics for {0} - {1}".format(resp["period_start"], resp["period_end"])
+        bill = resp["bill"]
+        self.build_resource_tree(bill)
+
+        def print_res(res, depth):
+            print "{0}{1}{2}: {3}\t{4} - {5}".format(
+                "    " * depth,
+                res["name"] and (res["name"] + " ") or "",
+                res["rtype"],
+                res["cost"],
+                res["created_at"],
+                res["destroyed_at"] or "now")
+            depth += 1
+            for child in res.get("children", ()):
+                print_res(child, depth)
+
+        for acc in bill:
+            print "Account {0} (#{1}): total {2}".format(
+                self.get_tenant_name_by_id(acc["name"]),
+                acc["name"], acc["cost"])
+            for res in acc["resources"]:
+                print_res(res, 1)
+
     @handle_command_error
-    @subcommand("Get statistics")
-    @add_argument("--billing-project", required=False, help="Select project to show statistics")
+    @subcommand("Get the bill")
+    @add_argument("--account", required=False, help="Select an account")
     @add_argument("--time-period", required=False, help="Set time period")
     @add_argument("--period-start", required=False, help="Set time period start")
     @add_argument("--period-end", required=False, help="Set time period end")
-    @add_argument("--instances", required=False, help="Include statistics about instances", action="store_true", default=False)
-    @add_argument("--images", required=False, help="Include statistics about images", action="store_true", default=False)
-    @add_argument("--details", required=False, help="Include detailed statistics", action="store_true", default=False)
-    def list(self):
-        include = []
-        if self.options.instances:
-            include.append("instances")
-        if self.options.images:
-            include.append("images")
-        if self.options.details:
-            include = ([opt + "-long" for opt in include]
-                       if include else ["instances-long"])
-        params = ["include=" + ",".join(include)] if include else []
-        self.ask(params)
-
-    def ask(self, params):
-        def url_escape(s):
-            return urllib.quote(s)
-
-        if self.options.billing_project:
-            req = "/{0}".format(url_escape(self.options.billing_project))
+    def bill(self):
+        if self.options.account:
+            params = "account={0}".format(self.url_escape(self.options.account))
         else:
-            req = ""
+            params = []
 
         for opt in ["time_period", "period_start", "period_end"]:
             if getattr(self.options, opt):
-                params.append("{0}={1}".format(opt, url_escape(getattr(self.options, opt))))
+                params.append("{0}={1}".format(
+                    opt, self.url_escape(getattr(self.options, opt))))
+        req = "/bill"
         if params:
             req = "{0}?{1}".format(req, "&".join(params))
         self.print_result(self.get(req))
 
-    @staticmethod
-    def format_usage(usage):
-        if "vcpus_h" in usage or "memory_mb_h" in usage:
-            return "{0:.4f} GB*h\t{1:.4f} MB*h\t{2:.4f} CPU*h".format(
-                usage.get("local_gb_h", 0),
-                usage.get("memory_mb_h", 0),
-                usage.get("vcpus_h", 0)
-            )
-        return "{0:.4f} GB*h".format(usage.get("local_gb_h", 0))
+    @handle_command_error
+    @subcommand("Get or set the tariffs")
+    @add_argument("--no-migrate", default=False, action="store_true",
+                  help="do not migrate to the new tariffs")
+    @add_argument("tariffs", nargs="*", help="tariff-1 value-1 tariff-2 value-2 ...")
+    def tariff(self):
+        tariffs = self.options.tariffs
+        if len(tariffs):
+            body = {
+                "datetime": "%sZ" % datetime.utcnow().isoformat(),
+                "migrate": not self.options.no_migrate,
+                "values": dict(zip(tariffs[::2],
+                                   (float(i) for i in tariffs[1::2]))),
+            }
+            resp = self.post("/tariff", body)
+        else:
+            resp = self.get("/tariff")
+        for key, value in resp.iteritems():
+            print "{0}: {1}".format(key, value)
 
-    def print_result(self, resp):
-        print "Statistics for {0} - {1}".format(resp["period_start"], resp["period_end"])
-        for project in resp["projects"]:
-            print "Project {0}".format(self.get_tenant_name_by_id(project["id"]))
-            for statistics_key in "instances", "images":
-                if statistics_key not in project:
-                    continue
-                statistics_value = project[statistics_key]
-                print "{0}: {1} items".format(statistics_key, statistics_value["count"])
-                if "items" in statistics_value:
-                    for object_item in statistics_value["items"]:
-                        item_descr = "\t{0}: {1}\t{2} - {3}".format(
-                            object_item["id"],
-                            object_item["name"] or "",
-                            object_item["created_at"],
-                            object_item["destroyed_at"] or "now")
-                        print item_descr
-                        print "\t\t{0}".format(self.format_usage(object_item["usage"]))
-                print "total:\t\t{0}".format(self.format_usage(statistics_value["usage"]))
+    @handle_command_error
+    @subcommand("Get accounts")
+    def account(self):
+        for acc in self.get("/account"):
+            print "#{id}: {name} ({ext})".format(
+                ext=self.get_tenant_name_by_id(acc["name"]),
+                **acc)
+
+    @handle_command_error
+    @subcommand("Get resources")
+    @add_argument("--account-id", required=False, help="Resources' account id")
+    @add_argument("--name", required=False, help="Resources' name")
+    @add_argument("--rtype", required=False, help="Resources' type")
+    @add_argument("--id", required=False, help="Resources' id")
+    @add_argument("--parent-id", required=False, help="Resources' parent id")
+    def resource(self):
+        params = []
+        for fld in ("account_id", "name", "id", "rtype", "parent_id"):
+            value = getattr(self.options, fld)
+            if value:
+                params.append(
+                    "{0}={1}".format(fld, self.url_escape(value)))
+        req = "/resource"
+        if params:
+            req = "{0}?{1}".format(req, "&".join(params))
+
+        def print_res(res, depth):
+            print  "{0}#{1}: {2}{3} {4}".format(
+                "    " * depth,
+                res["id"],
+                res["name"] and (res["name"] + " ") or "",
+                res["rtype"],
+                "; ".join(("{0}={1}".format(key, value)
+                           for key, value in res["attrs"].iteritems())))
+            depth += 1
+            for child in res.get("children", ()):
+                print_res(child, depth)
+
+        for res in self.get_resource_tree(self.get(req)):
+            print_res(res, 0)
 
 
 class LocalVolumesCommand(CliCommand):
