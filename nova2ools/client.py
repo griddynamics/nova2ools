@@ -68,7 +68,9 @@ class TokenInfo(object):
         raise EndpointNotFound()
 
 
-class NovaApiClient(object):
+class BaseClient(object):
+    CHUNKSIZE = 65536
+
     ARGUMENTS = [
         (("--use-keystone",), {"action": "store_true", "help": "Keystone or Nova URL for authentication"}),
         (("--auth-url",), {"help": "Keystone or Nova URL for authentication"}),
@@ -105,7 +107,7 @@ class NovaApiClient(object):
     def auth(self):
         if self.options.token:
             self.__token = self.options.token
-        self.__management_url = self.options.endpoint
+        self.management_url = self.options.endpoint
         if not (self.options.token and self.options.endpoint):
             if not self.options.auth_url:
                 raise CommandError(1, "Authentication URL is required")
@@ -117,7 +119,7 @@ class NovaApiClient(object):
             else:
                 self.auth_nova()
         else:
-            self.__auth_headers = {
+            self.auth_headers = {
                 "X-Auth-Token": self.__token,
             }
 
@@ -133,9 +135,9 @@ class NovaApiClient(object):
         if not self.__token:
             raise CommandError(1, "You are not authorized")
 
-        if not self.__management_url:
-            self.__management_url = resp.getheader("X-Server-Management-Url")
-        self.__auth_headers = {
+        if not self.management_url:
+            self.management_url = resp.getheader("X-Server-Management-Url")
+        self.auth_headers = {
             "X-Auth-Project-Id": self.options.tenant_name,
             "X-Auth-Token": self.__token
         }
@@ -167,10 +169,10 @@ class NovaApiClient(object):
             raise CommandError(1, "You are not authenticated")
         self.token_info = TokenInfo(access)
 
-        if not self.__management_url and self.service_type:
+        if not self.management_url and self.service_type:
             self.set_service_type(self.service_type)
 
-        self.__auth_headers = {
+        self.auth_headers = {
             "X-Auth-Token": self.token_info.get_token()
         }
         if not tenant_id:
@@ -179,13 +181,13 @@ class NovaApiClient(object):
             except Exception:
                 raise CommandError(1, "Response json object doesn't contain chain 'access->token->tenant->id'")
             self.options.tenant_id = tenant_id
-        self.__auth_headers["X-Tenant"] = tenant_id
+        self.auth_headers["X-Tenant"] = tenant_id
         if tenant_name:
-            self.__auth_headers["X-Tenant-Name"] = tenant_name
+            self.auth_headers["X-Tenant-Name"] = tenant_name
 
     @property
     def auth_token(self):
-        return self.__auth_headers["X-Auth-Token"]
+        return self.auth_headers["X-Auth-Token"]
 
     @property
     def tenant_id(self):
@@ -196,7 +198,7 @@ class NovaApiClient(object):
         return self.options.username
 
     def set_service_type(self, service_type, endpoint_type='publicURL'):
-        self.__management_url = self.url_for(
+        self.management_url = self.url_for(
                     service_type=service_type, endpoint_type=endpoint_type)
         self.service_type = service_type
 
@@ -207,74 +209,90 @@ class NovaApiClient(object):
         except EndpointNotFound:
             raise CommandError(1, "Could not find `%s' in service catalog" % service_type)
 
-    def http_log(self, args, kwargs, resp, body):
+    def http_log(self, method, url, body, headers, resp, resp_body):
         if not self.options.debug:
             return
 
-        string_parts = ["curl -i '%s' -X %s" % args]
+        string_parts = ["curl -i '%s' -X %s" % (url, method)]
 
-        for element in kwargs['headers']:
-            header = ' -H "%s: %s"' % (element, kwargs['headers'][element])
+        for element in headers:
+            header = ' -H "%s: %s"' % (element, headers[element])
             string_parts.append(header)
 
         print "REQ: %s\n" % "".join(string_parts)
-        if 'body' in kwargs:
-            print "REQ BODY: %s\n" % (kwargs['body'])
+        if body:
+            print "REQ BODY: %s\n" % body
         if resp:
-            print "RESP: %s\nRESP BODY: %s\n" % (resp.status, body)
+            print "RESP: %s\n" % resp.status
+        if resp_body:
+            print "RESP BODY: %s\n" % resp_body
 
-    def request(self, *args, **kwargs):
-        kwargs.setdefault('headers', kwargs.get('headers', {}))
-        if 'body' in kwargs and kwargs['body'] is not None:
-            kwargs['headers']['Content-Type'] = 'application/json'
-            kwargs['body'] = json.dumps(kwargs['body'])
+    def request(self, url, method, body=None, headers={}, read_body=True):
+        if isinstance(body, (dict, list)):
+            headers['Content-Type'] = 'application/json'
+            body = json.dumps(body)
 
-        resp, body = None, None
+        resp, resp_body = None, None
         try:
-            parsed = urlparse(args[0])
+            parsed = urlparse(url)
             client = httplib.HTTPConnection(parsed.netloc)
             request_uri = ("?".join([parsed.path, parsed.query])
                            if parsed.query
                            else parsed.path)
-            client.request(args[1], request_uri, **kwargs)
+            # Do a simple request or a chunked request, depending
+            # on whether the body param is a file-like object and
+            # the method is PUT or POST
+            if hasattr(body, 'read') and method.lower() in ('post', 'put'):
+                # Chunk it, baby...
+                client.putrequest(method, request_uri)
+ 
+                for header, value in headers.items():
+                    client.putheader(header, value)
+                client.putheader('Transfer-Encoding', 'chunked')
+                client.endheaders()
+ 
+                chunk = body.read(self.CHUNKSIZE)
+                while chunk:
+                    client.send('%x\r\n%s\r\n' % (len(chunk), chunk))
+                    chunk = body.read(self.CHUNKSIZE)
+                client.send('0\r\n\r\n')
+            else:
+                # Simple request...
+                client.request(method, request_uri, body, headers)
+
             resp = client.getresponse()
-            body = resp.read()
+            if read_body:
+                resp_body = resp.read()
         finally:
-            self.http_log(args, kwargs, resp, body)
-        return (resp, self.__validate_response(resp, body))
+            self.http_log(method, url, body, headers, resp, resp_body)
+        self.__validate_response(resp)
+        try:
+            resp_body = json.loads(resp_body)
+        except TypeError, ValueError:
+            pass
+        return (resp, resp_body)
 
     def get(self, path):
-        return self.request(self.__management_url + path, "GET", headers=self.__auth_headers)[1]
+        return self.request(self.management_url + path, "GET", headers=self.auth_headers)[1]
 
     def post(self, path, body):
-        return self.request(self.__management_url + path, "POST", body=body, headers=self.__auth_headers)[1]
+        return self.request(self.management_url + path, "POST", body=body, headers=self.auth_headers)[1]
 
     def action(self, path):
-        return self.request(self.__management_url + path, "POST", headers=self.__auth_headers)[1]
+        return self.request(self.management_url + path, "POST", headers=self.auth_headers)[1]
 
     def put(self, path, body):
-        return self.request(self.__management_url + path, "PUT", body=body, headers=self.__auth_headers)[1]
+        return self.request(self.management_url + path, "PUT", body=body, headers=self.auth_headers)[1]
 
     def delete(self, path):
-        return self.request(self.__management_url + path, "DELETE", headers=self.__auth_headers)[1]
+        return self.request(self.management_url + path, "DELETE", headers=self.auth_headers)[1]
 
-    def __validate_response(self, response, response_content):
-        if response.status == 200:
-            json_response = json.loads(response_content)
-            return json_response
-        if response.status == 404:
-            raise CommandError(1, response.reason)
-        if response.status == 401:
-            raise CommandError(1, response.reason)
-        if response.status == 204: # No Content
-            return None
-        if response.status == 202: # Accepted
-            try:
-                json_response = json.loads(response_content)
-            except ValueError:
-                return response_content
-            return json_response
+    def __validate_response(self, response):
+        if response.status / 100 == 2:
+            return
         if response.status == 400: # Bad Request
-            json_response = json.loads(response_content)
+            json_response = json.loads(response.read())
             raise CommandError(1, "Bad Request: {0}".format(json_response["badRequest"]["message"]))
+        if response.status / 100 == 4:
+            raise CommandError(1, response.reason)
         raise CommandError(1, "Unhandled response code: %s (%s)" % (response.status, response.reason))

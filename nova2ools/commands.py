@@ -11,7 +11,7 @@ from inspect import ismethod
 from itertools import ifilter
 import re
 
-from client import NovaApiClient
+from client import BaseClient
 from exceptions import CommandError
 from exceptions import handle_command_error
 from nova2ools import VERSION
@@ -51,7 +51,7 @@ class CliCommand(object):
     __common_defaults = {}
 
     @handle_command_error
-    def __init__(self, help, client_class=NovaApiClient, **kwargs):
+    def __init__(self, help, client_class=BaseClient, **kwargs):
         for arg in sys.argv[1:]:
             if not arg.startswith('-'):
                 break
@@ -243,29 +243,9 @@ class ImagesCommand(CliCommand):
 
     @handle_command_error
     def __init__(self):
-        super(ImagesCommand, self).__init__("Manage images available for the project")
-
-        self.init_glance_client()
-
-    def init_glance_client(self):
-        if self.options.use_keystone:
-            glance_url = self.client.url_for(service_type='image')
-        else:
-            glance_url = self.options.glance_url
-        use_keystone = self.options.use_keystone
-        parsed = urlparse.urlparse(glance_url)
-        use_ssl = parsed.scheme == 'https'
-        host = parsed.hostname
-        port = parsed.port or 80
-        doc_root = parsed.path
-        auth_token = self.client.auth_token
-        username = self.client.username
-        tenant_id = self.client.tenant_id
-
-        if not use_keystone and not glance_url:
-            raise CommandError(1, "You should specify GLANCE_URL environment variable if you don't work through keystone")
-
-        self.glance_client = GlanceClient(host, port, use_ssl, doc_root, auth_token, username, tenant_id, use_keystone)
+        super(ImagesCommand, self).__init__(
+            "Manage images available for the project",
+            GlanceClient, service_type="image")
 
     @subcommand("List available images")
     @add_argument(
@@ -295,7 +275,7 @@ class ImagesCommand(CliCommand):
                   "sort_key": sort_key,
                   "sort_dir": sort_dir}
 
-        images = self.glance_client.get_images_detailed(**params)
+        images = self.client.get_images_detailed(**params)
         format = self.options.format
         for img in ifilter(self.__filter_images, images):
             img = convert_timestamps_to_datetimes(img)
@@ -338,7 +318,7 @@ class ImagesCommand(CliCommand):
 
 
     @subcommand("Register image to glance", name="register")
-    @add_argument('--path', metavar='<path>', help='Image path')
+    @add_argument('--path', metavar='<path>', required=True, help='Image path')
     @add_argument('--name', metavar='<name>', help='Image name')
     @add_argument('--public', action="store_true", default=False,
         help='Allow use image from other tenants')
@@ -369,7 +349,7 @@ class ImagesCommand(CliCommand):
             kernel_id, ramdisk_id)
 
     @subcommand("Register kernel image to glance", name="register-kernel")
-    @add_argument('--path', metavar='<path>', help='Image path')
+    @add_argument('--path', metavar='<path>', required=True, help='Image path')
     @add_argument('--name', metavar='<name>', help='Image name')
     @add_argument('--public', action="store_true", default=False,
         help='Allow use image from other tenants')
@@ -387,7 +367,7 @@ class ImagesCommand(CliCommand):
             public, architecture)
 
     @subcommand("Register ramdisk image to glance", name="register-ramdisk")
-    @add_argument('--path', metavar='<path>', help='Image path')
+    @add_argument('--path', metavar='<path>', required=True, help='Image path')
     @add_argument('--name', metavar='<name>', help='Image name')
     @add_argument('--public', action="store_true", default=False,
         help='Allow use image from other tenants')
@@ -421,7 +401,7 @@ class ImagesCommand(CliCommand):
             meta['properties']['ramdisk_id'] = int(ramdisk_id)
         try:
             with open(path) as ifile:
-                image = self.glance_client.add_image(meta, ifile)
+                image = self.client.add_image(meta, ifile)
             new = image['id']
             print "Image registered to %(new)s (%(new)08x)." % locals()
             return new
