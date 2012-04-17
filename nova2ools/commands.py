@@ -110,9 +110,10 @@ class CliCommand(object):
 
     def get_server_by_name(self, name):
         servers = self.client.get("/servers/detail?name={0}".format(name))["servers"]
-        if len(servers) < 1:
+        filtered_servers = [server for server in servers if server["name"] == name]
+        if len(filtered_servers) < 1:
             raise CommandError(1, "VM `{0}` is not found".format(name))
-        if len(servers) > 1:
+        if len(filtered_servers) > 1:
             msg = "More then one({0}) server with `{1}` name (use `id` instead of name)".format(len(servers), name)
             raise CommandError(1, msg)
         return servers[0]
