@@ -53,7 +53,7 @@ class CliCommand(object):
     @handle_command_error
     def __init__(self, help, client_class=BaseClient, **kwargs):
         for arg in sys.argv[1:]:
-            if not arg.startswith('-'):
+            if not arg.startswith('-') or arg == '-h' or arg == '--help':
                 break
         else:
             sys.argv.insert(1, 'list')
