@@ -52,11 +52,12 @@ class CliCommand(object):
 
     @handle_command_error
     def __init__(self, help, client_class=BaseClient, **kwargs):
-        for arg in sys.argv[1:]:
-            if not arg.startswith('-') or arg == '-h' or arg == '--help':
-                break
-        else:
-            sys.argv.insert(1, 'list')
+        if callable(getattr(self, "list", None)):
+            for arg in sys.argv[1:]:
+                if not arg.startswith('-') or arg == '-h' or arg == '--help':
+                    break
+            else:
+                sys.argv.insert(1, 'list')
 
         self.__help = help
         self.__parser = self.__generate_options_parser(client_class)
