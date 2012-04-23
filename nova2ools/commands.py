@@ -197,6 +197,19 @@ class CliCommand(object):
             client.set_service_type(service_type)
         return self.tenant_by_id.get(tenant_id, "#{0}".format(tenant_id))
 
+    def save_list(self, name, collection):
+        home = os.environ.get("HOME", "")
+        with open("%s/.nova_data" % home, "a+") as datafile:
+            lines = ["%s='%s'\n" %(name, ' '.join(collection))]
+
+            for line in datafile:
+                if not line.isspace() and not line.startswith(name):
+                    lines.append(line)
+
+            datafile.seek(0)
+            datafile.truncate()
+            datafile.write("".join(lines) + "\n")
+
 
 @export
 def subcommand(help, name=None):
@@ -236,6 +249,8 @@ class FlavorsCommand(CliCommand):
         flavors = self.get("/detail")
         for flv in flavors["flavors"]:
             sys.stdout.write("{id}: {name} ram:{ram} vcpus:{vcpus} swap:{swap} disc:{disk}\n".format(**flv))
+        namelist = [flv["name"] for flv in flavors["flavors"]]
+        self.save_list("FLAVORS", namelist)
 
 
 class ImagesCommand(CliCommand):
@@ -290,6 +305,9 @@ class ImagesCommand(CliCommand):
                         first = False
                     else:
                         sys.stdout.write("          {0:14} -> {1}\n".format(key, value))
+
+        namelist = [image["name"] for image in images]
+        self.save_list("IMAGES", namelist)
 
     @subcommand("Register all images to glance", name="register-all")
     @add_argument('--image', metavar='<image>', help='Path to image')
@@ -484,6 +502,8 @@ class SshKeysCommand(CliCommand):
         keys = self.get()
         for key in keys["keypairs"]:
             sys.stdout.write("{keypair[name]}: {keypair[fingerprint]}\n".format(**key))
+        namelist = [key["keypair"]["name"] for key in keys["keypairs"]]
+        self.save_list("SSH_KEYS", namelist)
 
     @subcommand("Print public key to standard output", "print-public")
     @add_argument("key", help="Existing key name")
@@ -569,6 +589,8 @@ class VmsCommand(CliCommand):
                 self.__print_vm_detail(srv)
             else:
                 self.__print_vm_format(self.options.format, srv)
+        namelist = [srv["name"] for srv in servers]
+        self.save_list("VMS", namelist)
 
     @subcommand("Migrate VM")
     @add_argument("vm", help="VM id or name")
