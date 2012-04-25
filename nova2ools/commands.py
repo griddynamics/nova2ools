@@ -757,8 +757,11 @@ class SecGroupsCommand(CliCommand):
 
     @subcommand("List Security Groups")
     def list(self):
+        sg_names = []
         for sg in self.get()["security_groups"]:
             sys.stdout.write(self.__format(sg))
+            sg_names.append(sg["name"])
+        self.save_list("SGROUPS", sg_names)
 
     @subcommand("Show Security Group Details")
     @add_argument("name", help="Security Group Name")
