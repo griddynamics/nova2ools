@@ -916,7 +916,7 @@ class BillingCommand(CliCommand):
     @add_argument("--period-end", required=False, help="Set time period end")
     def bill(self):
         if self.options.account:
-            params = "account={0}".format(self.url_escape(self.options.account))
+            params = ["account={0}".format(self.url_escape(self.options.account))]
         else:
             params = []
 
