@@ -37,6 +37,36 @@ def CliCommandMetaclass(name, bases, dict):
 
 __all__.append("CliCommand")
 
+
+class ArgumentException(Exception):
+    def __init__(self, message):
+        self.message = message
+
+
+class NovaArgumentParser(ArgumentParser):
+
+    def __init__(self, *args, **kwargs):
+        self.default_param = kwargs.pop("default_param", "list")
+        super(NovaArgumentParser, self).__init__(*args, **kwargs)
+
+    def error(self, message):
+        raise ArgumentException(message)
+
+    def parse_args(self, args=None, namespace=None):
+        try:
+            return super(NovaArgumentParser, self).parse_args(args, namespace)
+        except ArgumentException as e:
+            if "too few arguments" not in e.message:
+                super(NovaArgumentParser, self).error(e.message)
+            try:
+                if args is None:
+                    args = sys.argv[1:]
+                args.append(self.default_param)
+                return super(NovaArgumentParser, self).parse_args(args, namespace)
+            except ArgumentException as e:
+                super(NovaArgumentParser, self).error(e.message)
+
+
 class CliCommand(object):
     __common_args = [
         (
@@ -52,13 +82,6 @@ class CliCommand(object):
 
     @handle_command_error
     def __init__(self, help, client_class=BaseClient, **kwargs):
-        if callable(getattr(self, "list", None)):
-            for arg in sys.argv[1:]:
-                if not arg.startswith('-') or arg == '-h' or arg == '--help':
-                    break
-            else:
-                sys.argv.insert(1, 'list')
-
         self.__help = help
         self.__parser = self.__generate_options_parser(client_class)
         self.parse_args()
@@ -85,7 +108,7 @@ class CliCommand(object):
         self.options = self.__parser.parse_args()
 
     def __generate_options_parser(self, client):
-        parser = ArgumentParser(description=self.__help)
+        parser = NovaArgumentParser(description=self.__help)
         for i in self.__common_args:
             parser.add_argument(*i[0], **i[1])
         for i in client.ARGUMENTS:
