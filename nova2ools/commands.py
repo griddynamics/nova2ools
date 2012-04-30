@@ -199,7 +199,7 @@ class CliCommand(object):
 
     def save_list(self, name, collection):
         home = os.environ.get("HOME", "")
-        with open("%s/.nova_data" % home, "a+") as datafile:
+        with open("%s/.nova2ools" % home, "a+") as datafile:
             lines = ["%s='%s'\n" %(name, ' '.join(collection))]
 
             for line in datafile:
