@@ -80,6 +80,8 @@ class CliCommand(object):
     ]
     __common_defaults = {}
 
+    DEFAULT_COMMAND = 'list'
+
     @handle_command_error
     def __init__(self, help, client_class=BaseClient, **kwargs):
         self.__help = help
@@ -108,7 +110,7 @@ class CliCommand(object):
         self.options = self.__parser.parse_args()
 
     def __generate_options_parser(self, client):
-        parser = NovaArgumentParser(description=self.__help)
+        parser = NovaArgumentParser(description=self.__help, default_param=self.DEFAULT_COMMAND)
         for i in self.__common_args:
             parser.add_argument(*i[0], **i[1])
         for i in client.ARGUMENTS:
@@ -891,6 +893,8 @@ class ExtensionsCommand(CliCommand):
 
 class BillingCommand(CliCommand):
     __metaclass__ = CliCommandMetaclass
+
+    DEFAULT_COMMAND = 'bill'
 
     @staticmethod
     def url_escape(s):
