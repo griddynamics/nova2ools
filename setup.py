@@ -14,4 +14,5 @@ setup(
     packages=find_packages(),
     scripts=glob("nova2ools-*"),
     py_modules=[],
+    data_files=[('/etc/bash_completion.d', ['bash_compl/nova2ools-completion'])]
 )

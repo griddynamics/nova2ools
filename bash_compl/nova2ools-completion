@@ -1,0 +1,660 @@
+_count_positionals(){
+    local cur prev opts positional
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+    positional=0
+
+    for (( i=2; i < $COMP_CWORD; i++ ))
+    do
+        if [[ ${COMP_WORDS[i]} != -* ]] ; then
+            (( positional++ ))
+        fi
+    done
+
+    return ${positional}
+}
+
+_many_arguments(){
+    for (( i=COMP_WORDS; i > 0 ; i-- ))
+    do
+        if [[ ${COMP_WORDS[i]} == -* && ${COMP_WORDS[i]} != $1 ]] ; then
+            return 1
+        fi
+        if [[ ${COMP_WORDS[i]} == $1 ]] ; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+_nova2ools_images(){
+    local cur prev opts command optsarr
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+    if [ -r ~/.nova2ools ] ; then
+        source ~/.nova2ools
+    fi
+
+    opts="list register register-kernel register-all register-ramdisk"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]}
+    do
+        for opt in ${optsarr[@]}
+        do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        list)
+            opts="-h --help -f --format -m --metadata --limit --marker --sort-key --sortdir"
+            case ${prev} in
+                -h | --help | -m | --metadata)
+                    ;;
+                -f | --format | --limit | --marker)
+                    opts=""
+                    ;;
+                --sort-key)
+                    opts="id name created_at updated_at size status"
+                    ;;
+                --sort-dir)
+                    opts="asc desc"
+                    ;;
+            esac
+            ;;
+        register)
+            opts="-h --help --path --name --public --arch --cont-format --disk-format --kernel --ramdisk"
+            case ${prev} in
+                --path | --image)
+                    opts=`ls -A`
+                    ;;
+                -h | --help | --public)
+                    ;;
+                --name | --arch | --cont-format | --disk-format | --ramdisk | --kernel)
+                    opts=""
+                    ;;
+            esac
+            ;;
+        register-kernel)
+            opts="-h --help --path --name --public --arch"
+            case ${prev} in
+                --name | --arch)
+                    opts=""
+                    ;;
+                -h | --help | --public)
+                    ;;
+                --path)
+                    opts=`ls -A`
+                    ;;
+            esac
+            ;;
+        register-all)
+            opts="-h --help --image --kernel --ramdisk --name --public --arch"
+            case ${prev} in
+                -h | --help | --public)
+                    ;;
+                --image | --kernel | --ramdisk)
+                    opts=`ls -A`
+                    ;;
+                --name | --arch)
+                    opts=""
+                    ;;
+            esac
+            ;;
+        register-ramdisk)
+            opts="-h --help --path --name --public --arch"
+            case ${prev} in
+                --name | --arch)
+                    opts=""
+                    ;;
+                -h | --help | --public)
+                    ;;
+                --path)
+                    opts=`ls -A`
+                    ;;
+            esac
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+_nova2ools_vms(){
+    local cur prev opts command count
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+    if [ -r ~/.nova2ools ] ; then
+        source ~/.nova2ools
+    fi
+
+    opts="list spawn show migrate get_security_groups remove"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]} 
+    do
+        for opt in ${optsarr[@]} 
+        do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        list)
+            opts="-h --help -f --format -d --details"
+            if [[ ${prev} == '-f' || ${prev} == '--format' ]] ; then
+                opts=""
+            fi
+            ;;
+        spawn)
+            opts="-h --help -n --name -i --image -f --flavor -p --admin-password -m --metadata -k --keyname -j --inject -s --security-groups"
+
+            for ((i=COMP_CWORD - 1 ; i >= 2 ; i--))
+            do
+                if [[ ${COMP_WORDS[i]} == -s || ${COMP_WORDS[i]} == --security_groups ]] ; then
+                    opts="$opts ${SGROUPS}"
+                    break
+                fi
+                if [[ ${COMP_WORDS[i]} == -* ]] ; then
+                    break
+                fi
+            done
+
+            case ${prev} in
+                -n|--name)
+                    opts=""
+                    ;;
+                -f|--flavor)
+                    opts=${FLAVORS}
+                    ;;
+                -i|--image)
+                    opts=${IMAGES}
+                    ;;
+                -k|--keyname)
+                    opts=${SSH_KEYS}
+                    ;;
+                -s|--security-groups)
+                    opts=${SGROUPS}
+                esac
+            ;;
+        show)
+            opts="-h --help -H --show-host"
+            if _count_positionals ; then
+                opts="$opts ${VMS}"
+            fi
+            ;;
+        migrate)
+            opts="-h --help --no-block-migration --live-migration -d --destination"
+            count=0
+
+            for (( i = 0 ; i < ${#COMP_WORDS[@]} ; i++ )) ; do
+                if [[ ${COMP_WORDS[i]} == --destination && COMP_WORDS[i+1] != -* ]] ; then
+                #    $count = 1
+                    count=1
+                fi
+            done
+
+            _count_positionals
+
+            if [[ `expr $? - $count` == 0 ]] ; then
+                opts="$opts ${VMS}"
+            fi
+
+            if [[ $prev == '--destination' ]] ; then
+                opts=""
+            fi
+            ;;
+        remove)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts ${VMS}"
+            fi
+            ;;
+        get_security_groups)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts ${VMS}"
+            fi
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+_nova2ools_billing(){
+    local cur prev opts command
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+
+    opts="tariff account bill resource"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]} 
+    do
+        for opt in ${optsarr[@]} 
+        do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        tariff)
+            opts="-h --help --no-migrate"
+            ;;
+        account)
+            opts="-h --help"
+            ;;
+        bill)
+            opts="-h --help --account --time-period --period-start --period-end"
+            case ${prev} in
+                --account | --time-period | --period-start | --period-end)
+                    opts=""
+                    ;;
+            esac
+            ;;
+        resource)
+            opts="-h --help --account-id --name --rtype --id --parent-id"
+            case ${prev} in
+                --account-id | --name | --rtype | --id | --parent-id)
+                    opts=""
+                    ;;
+            esac
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+_nova2ools_dns(){
+    local cur prev opts command
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+    opts="list zonedrop edit drop zoneadd add zonelist"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]} 
+    do
+        for opt in ${optsarr[@]} 
+        do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        list)
+            opts="-h --help -f --format --name --type"
+            ;;
+        zonedrop)
+            opts="-h --help -f --force"
+            ;;
+        edit)
+            opts="-h --help --content --ttl --priority"
+            ;;
+        drop)
+            opts="-h --help"
+            ;;
+        zoneadd)
+            opts="-h --help --primary --hostmaster --refresh --retry --expire --ttl"
+            ;;
+        add)
+            opts="-h --help --ttl --priority"
+            ;;
+        zonelist)
+            opts="-h --help"
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+_nova2ools_flavors(){
+    local cur prev opts command
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+    opts="list"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]} 
+    do
+        for opt in ${optsarr[@]} 
+        do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        list)
+            opts="-h --help -f --format --name --type"
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+_nova2ools_floating_ips(){
+    local cur prev opts command
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+    if [ -r ~/.nova2ools ] ; then
+        source ~/.nova2ools
+    fi
+
+    opts="list attach deallocate detach allocate"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]} 
+    do
+        for opt in ${optsarr[@]} 
+        do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        list)
+            opts="-h --help -f --format"
+            ;;
+        attach)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts ${VMS}"
+            fi
+            ;;
+        deallocate)
+            opts="-h --help"
+            ;;
+        detach)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts ${VMS}"
+            fi
+            ;;
+        allocate)
+            opts="-h --help -f --format"
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+_nova2ools_local_volumes(){
+    local cur prev opts command
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+
+    opts="list snapshot create resize delete"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]} 
+    do
+        for opt in ${optsarr[@]} 
+        do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        list)
+            opts="-h --help -f --format"
+            ;;
+        snapshot)
+            opts="-h --help --id --name"
+            ;;
+        create)
+            opts="-h --help --vm --snapshot --device --size"
+            ;;
+        resize)
+            opts="-h --help --id --size"
+            ;;
+        delete)
+            opts="-h --help --id"
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+_nova2ools_sgroups(){
+    local cur prev opts command
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+    if [ -r ~/.nova2ools ] ; then
+        source ~/.nova2ools
+    fi
+
+    opts="list remove-rule show create add-rule remove clean-group allow-group clean"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]} ; do
+        for opt in ${optsarr[@]} ; do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        list)
+            opts="-h --help"
+            ;;
+        remove-rule)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts $SGROUPS"
+            fi
+            ;;
+        show)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts $SGROUPS"
+            fi
+            ;;
+        create)
+            opts="-h --help"
+            ;;
+        add-rule)
+            opts="-h --help --id --port -p --protocol -a --from-address"
+            if _count_positionals ; then
+                opts="$opts $SGROUPS"
+            fi
+            ;;
+        remove)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts $SGROUPS"
+            fi
+            ;;
+        clean-group)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts $SGROUPS"
+            fi
+            ;;
+        allow-group)
+            opts="-h --help"
+            _count_positionals
+            if [[ $? == 0 || $? == 1 ]] ; then
+                opts="$opts $SGROUPS"
+            fi
+            ;;
+        clean)
+            opts="-h --help"
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+_nova2ools_sshkeys(){
+    local cur prev opts command
+    COMPREPLY=()
+    cur="${COMP_WORDS[COMP_CWORD]}"
+    prev="${COMP_WORDS[COMP_CWORD - 1]}"
+
+    if [ -r ~/.nova2ools ] ; then
+        source ~/.nova2ools
+    fi
+
+    opts="list print-public register generate remove"
+    optsarr=( $opts )
+
+    for word in ${COMP_WORDS[@]} ; do
+        for opt in ${optsarr[@]} ; do
+            if [[ $word == $opt ]] ; then
+                command=$opt
+                break
+            fi
+        done
+        if [[ "x$command" != "x" ]] ; then
+            break
+        fi
+    done
+
+    if [[ "x$command" == "x" ]] ; then
+        opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
+    fi
+
+    case ${command} in 
+        list)
+            opts="-h --help"
+            ;;
+        print-public)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts $SSH_KEYS"
+            fi
+            ;;
+        register)
+            opts="-h --help"
+            _count_positionals
+            if [[ $? == 1 ]] ; then
+                opts="$opts `ls -A`"
+            fi
+            ;;
+        generate)
+            opts="-h --help"
+            ;;
+        remove)
+            opts="-h --help"
+            if _count_positionals ; then
+                opts="$opts $SSH_KEYS"
+            fi
+            ;;
+    esac
+
+    COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) ) 
+    return 0
+}
+
+complete -F _nova2ools_images nova2ools-images
+complete -F _nova2ools_vms nova2ools-vms
+complete -F _nova2ools_billing nova2ools-billing
+complete -F _nova2ools_dns nova2ools-dns
+complete -F _nova2ools_flavors nova2ools-flavors
+complete -F _nova2ools_floating_ips nova2ools-floating-ips
+complete -F _nova2ools_local_volumes nova2ools-local-volumes
+complete -F _nova2ools_sgroups nova2ools-sgroups
+complete -F _nova2ools_sshkeys nova2ools-sshkeys
