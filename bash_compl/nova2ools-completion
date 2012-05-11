@@ -29,7 +29,7 @@ _many_arguments(){
 }
 
 _nova2ools_images(){
-    local cur prev opts command optsarr
+    local cur prev opts command optsarr command_position
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD - 1]}"
@@ -40,13 +40,15 @@ _nova2ools_images(){
 
     opts="list register register-kernel register-all register-ramdisk"
     optsarr=( $opts )
+    command_position=-1
 
-    for word in ${COMP_WORDS[@]}
+    for (( i = 0 ; i < ${#COMP_WORDS[@]} ; i++ ))
     do
         for opt in ${optsarr[@]}
         do
-            if [[ $word == $opt ]] ; then
+            if [[ ${COMP_WORDS[i]} == $opt ]] ; then
                 command=$opt
+                command_position=1
                 break
             fi
         done
@@ -135,7 +137,7 @@ _nova2ools_images(){
 }
 
 _nova2ools_vms(){
-    local cur prev opts command count
+    local cur prev opts command count command_position
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD - 1]}"
@@ -146,13 +148,15 @@ _nova2ools_vms(){
 
     opts="list spawn show migrate get_security_groups remove"
     optsarr=( $opts )
+    command_position=-1
 
-    for word in ${COMP_WORDS[@]} 
+    for (( i = 0 ; i < ${#COMP_WORDS[@]} ; i++ ))
     do
-        for opt in ${optsarr[@]} 
+        for opt in ${optsarr[@]}
         do
-            if [[ $word == $opt ]] ; then
+            if [[ ${COMP_WORDS[i]} == $opt ]] ; then
                 command=$opt
+                command_position=1
                 break
             fi
         done
@@ -175,7 +179,7 @@ _nova2ools_vms(){
         spawn)
             opts="-h --help -n --name -i --image -f --flavor -p --admin-password -m --metadata -k --keyname -j --inject -s --security-groups"
 
-            for ((i=COMP_CWORD - 1 ; i >= 2 ; i--))
+            for ((i=COMP_CWORD - 1 ; i >= command_position ; i--))
             do
                 if [[ ${COMP_WORDS[i]} == -s || ${COMP_WORDS[i]} == --security_groups ]] ; then
                     opts="$opts ${SGROUPS}"
@@ -215,7 +219,6 @@ _nova2ools_vms(){
 
             for (( i = 0 ; i < ${#COMP_WORDS[@]} ; i++ )) ; do
                 if [[ ${COMP_WORDS[i]} == --destination && COMP_WORDS[i+1] != -* ]] ; then
-                #    $count = 1
                     count=1
                 fi
             done
@@ -249,7 +252,7 @@ _nova2ools_vms(){
 }
 
 _nova2ools_billing(){
-    local cur prev opts command
+    local cur prev opts command command_position
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD - 1]}"
@@ -257,13 +260,15 @@ _nova2ools_billing(){
 
     opts="tariff account bill resource"
     optsarr=( $opts )
+    command_position=-1
 
-    for word in ${COMP_WORDS[@]} 
+    for (( i = 0 ; i < ${#COMP_WORDS[@]} ; i++ ))
     do
-        for opt in ${optsarr[@]} 
+        for opt in ${optsarr[@]}
         do
-            if [[ $word == $opt ]] ; then
+            if [[ ${COMP_WORDS[i]} == $opt ]] ; then
                 command=$opt
+                command_position=1
                 break
             fi
         done
@@ -271,6 +276,7 @@ _nova2ools_billing(){
             break
         fi
     done
+
 
     if [[ "x$command" == "x" ]] ; then
         opts="$opts -h --help -v --version --use-keystone --auth-url --glance-url --username --password --tenant-id --tenant-name --token --endpoint --debug"
@@ -306,7 +312,7 @@ _nova2ools_billing(){
 }
 
 _nova2ools_dns(){
-    local cur prev opts command
+    local cur prev opts command count
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD - 1]}"
@@ -334,7 +340,14 @@ _nova2ools_dns(){
 
     case ${command} in 
         list)
+            count=0
             opts="-h --help -f --format --name --type"
+            for (( i = 0 ; i < ${#COMP_WORDS[@]} ; i++ )) ; do
+                if [[ COMP_WORDS[i+1] != -* && (${COMP_WORDS[i]} == --name || ${COMP_WORDS[i]} == --type || ${COMP_WORDS[i]} == --format || ${COMP_WORDS[i]} == -f) ]] ; then
+                    count+=1
+                fi
+            done
+            #There is no zone data so we will make it later
             ;;
         zonedrop)
             opts="-h --help -f --force"
@@ -389,7 +402,7 @@ _nova2ools_flavors(){
 
     case ${command} in 
         list)
-            opts="-h --help -f --format --name --type"
+            opts="-h --help"
             ;;
     esac
 
@@ -507,7 +520,7 @@ _nova2ools_local_volumes(){
 }
 
 _nova2ools_sgroups(){
-    local cur prev opts command
+    local cur prev opts command count
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD - 1]}"
@@ -556,7 +569,16 @@ _nova2ools_sgroups(){
             ;;
         add-rule)
             opts="-h --help --id --port -p --protocol -a --from-address"
-            if _count_positionals ; then
+            count=0
+            for (( i = 0 ; i < ${#COMP_WORDS[@]} ; i++ )) ; do
+                if [[ COMP_WORDS[i+1] != -* && (${COMP_WORDS[i]} == --name || ${COMP_WORDS[i]} == --type || ${COMP_WORDS[i]} == --format || ${COMP_WORDS[i]} == -f) ]] ; then
+                    count+=1
+                fi
+            done
+
+            _count_positionals
+
+            if [[ `expr $? - $count` == 0 ]] ; then
                 opts="$opts $SGROUPS"
             fi
             ;;
