@@ -142,7 +142,7 @@ class CliCommand(object):
         if len(filtered_servers) > 1:
             msg = "More then one({0}) server with `{1}` name (use `id` instead of name)".format(len(servers), name)
             raise CommandError(1, msg)
-        return servers[0]
+        return filtered_servers[0]
 
     def get_server_by_id(self, id):
         server = self.client.get("/servers/{0}".format(id))["server"]
