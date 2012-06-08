@@ -130,8 +130,6 @@ class CliCommand(object):
         return parser
 
     def get_server(self, identifier):
-        if not identifier.isdigit():
-            return self.get_server_by_name(identifier)
         return self.get_server_by_id(identifier)
 
     def get_server_by_name(self, name):
@@ -214,7 +212,7 @@ class CliCommand(object):
                 self.tenant_by_id = dict(
                     [
                         (tenant["id"], tenant["name"])
-                        for tenant in client.get("/tenants?limit=10000")["tenants"]["values"]
+                        for tenant in client.get("/tenants?limit=10000")["tenants"]
                     ]
                 )
             except CommandError:
@@ -292,11 +290,11 @@ class ImagesCommand(CliCommand):
     @subcommand("List available images")
     @add_argument(
         "-f", "--format",
-        default="{name:20} 0x{id:08x},{id:<5} {type} {status:10}",
+        default="{name:20} {id} {type} {status:10}",
         help="Set output format. The format syntax is the same as for Python `str.format` method. " +
              "Available variables: `id`, `name`, `created_at`, `updated_at`, `type`, `status`, " \
              "`size`, `checksum`, `is_public`, `metadata`. Default format: " +
-             "\"{name:20} 0x{id:08x},{id:<5} {type} {status:10}\""
+             "\"{name:20} {id} {type} {status:10}\""
     )
     @add_argument("-m", "--metadata", action="store_true", default=False, help="Include metadata information to output")
     @add_argument("--limit", type=int, default=20, help="Maximum number of items to return")
@@ -462,7 +460,7 @@ class ImagesCommand(CliCommand):
             )
 
     def __print_image_format(self, format, image):
-        id          = int(image["id"])
+        id          = image["id"]
         name        = image["name"]
         created_at  = image["created_at"]
         updated_at  = image["updated_at"]
@@ -599,11 +597,11 @@ class VmsCommand(CliCommand):
     @subcommand("List spawned VMs")
     @add_argument(
         "-f", "--format",
-        default="{name:20} 0x{id:08x},{id:<5} {user_id:15} {tenant_name:10} {status:10} {fixed_addresses} {key_name:15}",
+        default="{name:20} {id} {user_id:15} {tenant_name:10} {status:10} {key_name:15}",
         help="Set output format. The format syntax is the same as for Python `str.format` method. " +
         "Available variables: `id`, `name`, `created`, `updated`, `user_id`, `status`, `tenant_id`, `tenant_name`, " +
         "`fixed_addresses`, `float_addresses`, `image_id`. Default format: " +
-        "\"{name:20} 0x{id:08x},{id:<5} {user_id:15} {tenant_name:10} {status:10} {fixed_addresses} {key_name:15}\""
+        "\"{name:20} {id} {user_id:15} {tenant_name:10} {status:10} {key_name:15}\""
     )
     @add_argument("-d", "--details", default=False, action="store_true", help="Print detailed information about VM")
     def list(self):
@@ -672,22 +670,6 @@ class VmsCommand(CliCommand):
         status = vm["status"]
         tenant_id = vm["tenant_id"]
         tenant_name = self.get_tenant_name_by_id(vm["tenant_id"])
-        fixed_addresses = ",".join(
-            (
-            i["addr"]
-            for j in vm["addresses"].values()
-            for i in j
-            if i["fixed"]
-            )
-        )
-        float_addresses = ",".join(
-            (
-            i["addr"]
-            for j in vm["addresses"].values()
-            for i in j
-            if not i["fixed"]
-            )
-        )
         image_id = vm["image"]["id"]
         key_name = vm["key_name"]
         info = dict(locals())
@@ -701,7 +683,7 @@ class VmsCommand(CliCommand):
         img = self.get_image_detail(srv["image"]["id"])
         flv = self.get_flavor_detail(srv["flavor"]["id"])
         sys.stdout.write(
-            "{name}({id}, 0x{id:x}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n"
+            "{name}({id}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n"
             .format(
                 tenant_name=self.get_tenant_name_by_id(srv["tenant_id"]),
                 **srv
