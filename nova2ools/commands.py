@@ -129,8 +129,15 @@ class CliCommand(object):
             subparser.set_defaults(subcommand=attr)
         return parser
 
+    def is_valid_id(self, id):
+        if id.isdigit() or re.match(r'[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}', id):
+            return True
+        return False
+
     def get_server(self, identifier):
-        return self.get_server_by_id(identifier)
+        if self.is_valid_id(identifier):
+            return self.get_server_by_id(identifier)
+        return self.get_server_by_name(identifier)
 
     def get_server_by_name(self, name):
         servers = self.client.get("/servers/detail?name={0}".format(name))["servers"]
@@ -170,7 +177,7 @@ class CliCommand(object):
         return flavor
 
     def get_image(self, identifier):
-        if not identifier.isdigit():
+        if not is_valid_id(identifier):
             return self.get_image_by_name(identifier)
         return self.get_image_by_id(identifier)
 
@@ -680,7 +687,10 @@ class VmsCommand(CliCommand):
         sys.stdout.write("\n")
 
     def __print_vm_detail(self, srv):
-        img = self.get_image_detail(srv["image"]["id"])
+        try:
+            img = self.get_image_detail(srv["image"]["id"])
+        except CommandError as e:
+            img = {}
         flv = self.get_flavor_detail(srv["flavor"]["id"])
         sys.stdout.write(
             "{name}({id}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n"
@@ -695,7 +705,7 @@ class VmsCommand(CliCommand):
         for net_id, addrs in srv["addresses"].items():
             for addr in addrs:
                 type = "float"
-                if addr["fixed"]:
+                if addr.get("fixed", None):
                     type = "fixed"
                 if first:
                     prefix = "       Addresses:"
@@ -705,7 +715,8 @@ class VmsCommand(CliCommand):
                 print "{prefix} {addr[addr]}(v{addr[version]}) net:{net_id} {type}".format(**locals())
         if "host" in srv:
             print "            Host: ", srv.get("host")
-        print "           Image: ", img["name"],
+        if img:
+            print "           Image: ", img["name"],
         try:
             print "({metadata[architecture]})".format(**img)
         except KeyError:
