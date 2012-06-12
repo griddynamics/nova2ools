@@ -177,7 +177,7 @@ class CliCommand(object):
         return flavor
 
     def get_image(self, identifier):
-        if not is_valid_id(identifier):
+        if not self.is_valid_id(identifier):
             return self.get_image_by_name(identifier)
         return self.get_image_by_id(identifier)
 
@@ -446,14 +446,14 @@ class ImagesCommand(CliCommand):
                                'architecture': architecture,
                                'image_location': 'local'}}
         if kernel_id:
-            meta['properties']['kernel_id'] = int(kernel_id)
+            meta['properties']['kernel_id'] = kernel_id
         if ramdisk_id:
-            meta['properties']['ramdisk_id'] = int(ramdisk_id)
+            meta['properties']['ramdisk_id'] = ramdisk_id
         try:
             with open(path) as ifile:
                 image = self.client.add_image(meta, ifile)
             new = image['id']
-            print "Image registered to %(new)s (%(new)08x)." % locals()
+            print "Image registered to %(new)." % locals()
             return new
         except Exception as exc:
             print "Failed to register %(path)s: %(exc)s" % locals()
@@ -561,6 +561,7 @@ class VmsCommand(CliCommand):
     def remove(self):
         srv = self.get_server(self.options.vm)
         self.delete("/{0}".format(srv["id"]))
+        print "Instance {0} successfully removed".format(srv["id"])
 
     @subcommand("Show information about VM")
     @add_argument("vm", help="VM id or name")
@@ -599,7 +600,8 @@ class VmsCommand(CliCommand):
         if self.options.security_groups is not None:
             srvDesc["security_groups"] = [{"name": i} for i in self.options.security_groups]
         srv = self.post("", {"server": srvDesc})["server"]
-        self.__print_vm_detail(srv)
+        srv_details = self.get_server(srv["id"])
+        self.__print_vm_detail(srv_details)
 
     @subcommand("List spawned VMs")
     @add_argument(
@@ -690,7 +692,7 @@ class VmsCommand(CliCommand):
         try:
             img = self.get_image_detail(srv["image"]["id"])
         except CommandError as e:
-            img = {}
+            pass
         flv = self.get_flavor_detail(srv["flavor"]["id"])
         sys.stdout.write(
             "{name}({id}): user:{user_id} project:{tenant_name} key:{key_name} {status}\n"
@@ -894,7 +896,7 @@ class BillingCommand(CliCommand):
         return urllib.quote(s)
 
     def __init__(self):
-        super(BillingCommand, self).__init__("Manage billing subsystem", service_type="nova_billing")
+        super(BillingCommand, self).__init__("Manage billing subsystem", service_type="nova-billing")
 
     @staticmethod
     def get_resource_tree(resources):
@@ -932,7 +934,7 @@ class BillingCommand(CliCommand):
 
     def print_result(self, resp):
         print "Statistics for {0} - {1}".format(resp["period_start"], resp["period_end"])
-        bill = resp["bill"]
+        bill = resp["accounts"]
         self.build_resource_tree(bill)
 
         def print_res(res, depth):
@@ -970,7 +972,7 @@ class BillingCommand(CliCommand):
             if getattr(self.options, opt):
                 params.append("{0}={1}".format(
                     opt, self.url_escape(getattr(self.options, opt))))
-        req = "/bill"
+        req = "/report"
         if params:
             req = "{0}?{1}".format(req, "&".join(params))
         self.print_result(self.get(req))
@@ -1216,13 +1218,13 @@ class FloatingIpCommand(CliCommand):
         raise CommandError(1, "Floating ip %s not found" % ip)
 
     def get_floating_ip_by_id(self, id):
-        id = int(id)
+        id = str(id)
         res = self.get("/os-floating-ips")
         floating_ips = res.get('floating_ips')
         if not floating_ips:
             raise CommandError(1, "There are no floating ips available")
         for floating_ip in floating_ips:
-            if floating_ip['id'] == id:
+            if str(floating_ip['id']) == id:
                 return floating_ip
         raise CommandError(1, "Floating ip with id %s not found" % id)
 

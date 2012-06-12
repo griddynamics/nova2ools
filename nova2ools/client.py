@@ -267,7 +267,8 @@ class BaseClient(object):
             self.http_log(method, url, body, headers, resp, resp_body)
         self.__validate_response(resp)
         try:
-            resp_body = json.loads(resp_body)
+            if resp_body:
+                resp_body = json.loads(resp_body)
         except TypeError, ValueError:
             pass
         return (resp, resp_body)
