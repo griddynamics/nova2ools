@@ -568,8 +568,7 @@ class VmsCommand(CliCommand):
     @add_argument("-H", "--show-host", default=False, action="store_true", help="Show host for image (admin only)")
     def show(self):
         srv = self.get_server(self.options.vm)
-        if (self.options.show_host):
-            srv["host"] = self.get_vm_host(srv["id"])
+
         self.__print_vm_detail(srv)
 
     @subcommand("Spawn a new VM")
@@ -654,11 +653,6 @@ class VmsCommand(CliCommand):
         for group in res['result']:
             print group
 
-    def get_vm_host(self, id):
-        url = "/%s/host" % id
-        res = self.get(url)
-        return res['result']
-
     def get_image_detail(self, id):
         return self.__get_detail_cached(id, "/images", self.__images)["image"]
 
@@ -715,8 +709,8 @@ class VmsCommand(CliCommand):
                 else:
                     prefix = "                 "
                 print "{prefix} {addr[addr]}(v{addr[version]}) net:{net_id} {type}".format(**locals())
-        if "host" in srv:
-            print "            Host: ", srv.get("host")
+        if self.options.show_host:
+            print "            Host: ", srv.get("OS-EXT-SRV-ATTR:host")
         if img:
             print "           Image: ", img["name"],
         try:
@@ -724,6 +718,7 @@ class VmsCommand(CliCommand):
         except KeyError:
             print ""
         print "          Flavor: {name} ram:{ram} vcpus:{vcpus} disk:{disk} swap:{swap}".format(**flv)
+
         if len(srv["metadata"]) > 0:
             first = True
             for key, value in srv["metadata"].items():
