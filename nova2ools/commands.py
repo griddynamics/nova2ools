@@ -605,7 +605,7 @@ class VmsCommand(CliCommand):
     @subcommand("List spawned VMs")
     @add_argument(
         "-f", "--format",
-        default="{name:20} {id} {user_id:15} {tenant_name:10} {status:10} {key_name:15}",
+        default="{name:20} {id} {user_id:15} {tenant_name:10} {status:10} {key_name:15} {ip_address}",
         help="Set output format. The format syntax is the same as for Python `str.format` method. " +
         "Available variables: `id`, `name`, `created`, `updated`, `user_id`, `status`, `tenant_id`, `tenant_name`, " +
         "`fixed_addresses`, `float_addresses`, `image_id`. Default format: " +
@@ -675,6 +675,9 @@ class VmsCommand(CliCommand):
         tenant_name = self.get_tenant_name_by_id(vm["tenant_id"])
         image_id = vm["image"]["id"]
         key_name = vm["key_name"]
+        for key in vm["addresses"]:
+            for addr in vm["addresses"][key]:
+                ip_address = addr["addr"]
         info = dict(locals())
         del info["self"]
         del info["vm"]
@@ -700,9 +703,6 @@ class VmsCommand(CliCommand):
         first = True
         for net_id, addrs in srv["addresses"].items():
             for addr in addrs:
-                type = "float"
-                if addr.get("fixed", None):
-                    type = "fixed"
                 if first:
                     prefix = "       Addresses:"
                     first = False
