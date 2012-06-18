@@ -665,23 +665,19 @@ class VmsCommand(CliCommand):
         return cache[id]
 
     def __print_vm_format(self, format, vm):
-        id = vm["id"]
-        name = vm["name"]
-        created = vm["created"]
-        updated = vm["updated"]
-        user_id = vm["user_id"]
-        status = vm["status"]
-        tenant_id = vm["tenant_id"]
-        tenant_name = self.get_tenant_name_by_id(vm["tenant_id"])
-        image_id = vm["image"]["id"]
-        key_name = vm["key_name"]
-        for key in vm["addresses"]:
-            for addr in vm["addresses"][key]:
-                ip_address = addr["addr"]
-        info = dict(locals())
-        del info["self"]
-        del info["vm"]
-        del info["format"]
+        info = dict(((key, vm[key])
+                     for key in ("id", "name", "created",
+                         "updated", "user_id", "status",
+                         "tenant_id", "key_name")))
+        info["tenant_name"] = self.get_tenant_name_by_id(vm["tenant_id"])
+        info["image_id"] = vm["image"]["id"]
+        for value in vm["addresses"].itervalues():
+            for addr in value:
+                info["ip_address"] = addr["addr"]
+                break
+            else:
+                continue
+            break
         sys.stdout.write(format.format(**info))
         sys.stdout.write("\n")
 
