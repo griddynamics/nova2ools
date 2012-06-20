@@ -269,7 +269,7 @@ class BaseClient(object):
         try:
             if resp_body:
                 resp_body = json.loads(resp_body)
-        except TypeError, ValueError:
+        except (TypeError, ValueError):
             pass
         return (resp, resp_body)
 
